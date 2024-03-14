@@ -19,7 +19,6 @@ import numpy as np
 import math
 import tkinter as tk
 import socket
-import getBatchFirebase
 import json
 import globalvars
 import matplotlib
@@ -296,7 +295,7 @@ class EstablishLoggingLocationResult(TestResult):
         super().__init__(test_status, step_start_time)
         self.file_path = file_path
 
-class EstablishZeroPressure(TestStep):
+class PressureCheck(TestStep):
     "Reads pressure sensor for the number of seconds specified, used for Zero, Closed Valve and Fully Open tests"
     ERRORS:dict = {
                     "Timeout_V": "OtO valve failed to close in time.  洒水器阀门无法及时关闭",
@@ -330,7 +329,7 @@ class EstablishZeroPressure(TestStep):
                     max_acceptable_ADC: float = 1875000  # Jan 2024 from histogram 1875000
                     min_acceptable_ADC: float = 1520000  # Jan 2024 from histogram 1520000
                 else:
-                    return EstablishZeroPressureResult(test_status=self.ERRORS.get("Pressure_Sensor"), step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
+                    return PressureCheckResult(test_status=self.ERRORS.get("Pressure_Sensor"), step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
             elif self.class_function in "MFO_test":  # new fully open test at closed positions uses adjusted limits
                 if pressure_sensor_check == peripherals_list.DUTsprinkler.psig15:
                     max_acceptable_STD: float = 780  # 2x limit from zero pressure
@@ -343,7 +342,7 @@ class EstablishZeroPressure(TestStep):
                     max_acceptable_ADC: float = 2100000  # from 2411 data
                     min_acceptable_ADC: float = 1520000  # Jan 2024 from histogram 1520000
                 else:
-                    return EstablishZeroPressureResult(test_status=self.ERRORS.get("Pressure_Sensor"), step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
+                    return PressureCheckResult(test_status=self.ERRORS.get("Pressure_Sensor"), step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
             elif self.class_function == "FO_test":
                 if pressure_sensor_check == peripherals_list.DUTsprinkler.psig15:
                     max_acceptable_STD: float = 32000  # confirmed Jan 2023
@@ -356,9 +355,9 @@ class EstablishZeroPressure(TestStep):
                     max_acceptable_ADC: float = 3790000  # updated Apr 2023
                     min_acceptable_ADC: float = 2680000  # updated Apr 2023
                 else:
-                    return EstablishZeroPressureResult(test_status=self.ERRORS.get("Pressure_Sensor"), step_start_time=startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
+                    return PressureCheckResult(test_status=self.ERRORS.get("Pressure_Sensor"), step_start_time=startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
             else:
-                return EstablishZeroPressureResult(test_status=self.ERRORS.get("Bad_Function"), step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
+                return PressureCheckResult(test_status=self.ERRORS.get("Bad_Function"), step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
         else:
             if self.class_function == "EOL MFO_test":   # new fully open test at closed positions uses same limits as zero pressure
                 if pressure_sensor_check == peripherals_list.DUTsprinkler.psig15:
@@ -372,7 +371,7 @@ class EstablishZeroPressure(TestStep):
                     max_acceptable_ADC: float = 1813062 # 2023/09/04 UPDATE 4 STD
                     min_acceptable_ADC: float = 1644978 # 2023/09/04 UPDATE 4 STD
                 else:
-                    return EstablishZeroPressureResult(test_status=self.ERRORS.get("Pressure_Sensor"), step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
+                    return PressureCheckResult(test_status=self.ERRORS.get("Pressure_Sensor"), step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
             elif self.class_function == "FO_test":
                 if pressure_sensor_check == peripherals_list.DUTsprinkler.psig15:
                     max_acceptable_STD: float = 32000
@@ -385,9 +384,9 @@ class EstablishZeroPressure(TestStep):
                     max_acceptable_ADC: float = 3658200 # 90 DEG POINT 2023/09/04 4 STD
                     min_acceptable_ADC: float = 2718865 # 90 DEG POINT 2023/09/04 4 STD
                 else:
-                    return EstablishZeroPressureResult(test_status=self.ERRORS.get("Pressure_Sensor"), step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
+                    return PressureCheckResult(test_status=self.ERRORS.get("Pressure_Sensor"), step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
             else:
-                return EstablishZeroPressureResult(test_status=self.ERRORS.get("Bad_Function"), step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
+                return PressureCheckResult(test_status=self.ERRORS.get("Bad_Function"), step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
 
         standardDeviation:float = 32000  # should be equal or bigger than min_acceptable_STD defined above
         number_of_trials:int = 2
@@ -431,7 +430,7 @@ class EstablishZeroPressure(TestStep):
             peripherals_list.DUTMLB.clear_incoming_packet_log()
 
             if not Sensor_Read_List:
-                EstablishZeroPressureResult(test_status = self.ERRORS.get("Empty List"), step_start_time = startTime, Zero_P = None, Zero_P_Tolerance = None)
+                PressureCheckResult(test_status = self.ERRORS.get("Empty List"), step_start_time = startTime, Zero_P = None, Zero_P_Tolerance = None)
 
             for message in Sensor_Read_List:
                 pressureReadingData.append([int(message.time_ms), int(message.pressure_adc)])
@@ -462,7 +461,7 @@ class EstablishZeroPressure(TestStep):
                 function = "Valve Fully Open Position Testing  阀门全打开位置测试"
                 self.parent.create_plot(window = self.parent.GraphHolder, plottype = "fohistplot", xaxis = pressureReading, yaxis = None, size = None, name = function, clear = False)
             else: 
-                return EstablishZeroPressureResult(test_status=self.ERRORS.get("Bad_Function"), step_start_time = startTime, Zero_P= mean, Zero_P_Tolerance= Zero_Tolerance)
+                return PressureCheckResult(test_status=self.ERRORS.get("Bad_Function"), step_start_time = startTime, Zero_P= mean, Zero_P_Tolerance= Zero_Tolerance)
           
             UnitName = peripherals_list.DUTsprinkler.deviceID
             bom_Number = peripherals_list.DUTsprinkler.bomNumber
@@ -496,21 +495,21 @@ class EstablishZeroPressure(TestStep):
 
         if not STD_check or not ADC_check:
             if not STD_check and not ADC_check:
-                return EstablishZeroPressureResult(test_status = self.ERRORS.get("BAD_Both"), step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
+                return PressureCheckResult(test_status = self.ERRORS.get("BAD_Both"), step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
             if not STD_check:
-                return EstablishZeroPressureResult(test_status = self.ERRORS.get("BAD_STD") + f"Set Min and Max  设置最小和最大值: {min_acceptable_STD , max_acceptable_STD}, Measured STD  测量标准差: {standardDeviation}", step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
+                return PressureCheckResult(test_status = self.ERRORS.get("BAD_STD") + f"Set Min and Max  设置最小和最大值: {min_acceptable_STD , max_acceptable_STD}, Measured STD  测量标准差: {standardDeviation}", step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
             if not ADC_check: 
-                return EstablishZeroPressureResult(test_status = f"Set Min and Max  设置最小和最大值: {min_acceptable_ADC , max_acceptable_ADC}, Measured ADC  测量ADC值: {mean}", step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
+                return PressureCheckResult(test_status = f"Set Min and Max  设置最小和最大值: {min_acceptable_ADC , max_acceptable_ADC}, Measured ADC  测量ADC值: {mean}", step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
 
-        return EstablishZeroPressureResult(test_status = f"±Zero Pressure Reading  0压力读取: {mean:,} ADC, STD: {standardDeviation:,} ADC", step_start_time = startTime, Zero_P= mean, Zero_P_Tolerance= Zero_Tolerance)
+        return PressureCheckResult(test_status = f"±Zero Pressure Reading  0压力读取: {mean:,} ADC, STD: {standardDeviation:,} ADC", step_start_time = startTime, Zero_P= mean, Zero_P_Tolerance= Zero_Tolerance)
             
-class EstablishZeroPressureResult(TestResult):
+class PressureCheckResult(TestResult):
     def __init__(self, test_status: Union[str, None], step_start_time: float, Zero_P:int, Zero_P_Tolerance:int):
         super().__init__(test_status, step_start_time)
         self.Zero_P = Zero_P
         self.Zero_P_Tolerance = Zero_P_Tolerance
 
-class GetAndSaveNozzleHomePosition(TestStep):
+class SendNozzleHome(TestStep):
     ERRORS: Dict[str,str] = {"Not Valid": "OtO nozzle position value is not valid.  洒水器喷嘴位置值无效"}
 
     def run_step(self, peripherals_list: TestPeripherals):
@@ -520,20 +519,20 @@ class GetAndSaveNozzleHomePosition(TestStep):
         except peripherals_list.DUTsprinkler.NoNVSException:
             saved_MLB = 0
         except Exception as e:
-            return GetNozzleHomePositionResult(test_status = str(e), step_start_time = startTime, N_Offset_calc = nozzleOffset, N_offset_MLB = new_saved_MLB)
+            return SendNozzleHomeResult(test_status = str(e), step_start_time = startTime, N_Offset_calc = nozzleOffset, N_offset_MLB = new_saved_MLB)
         Nozzle_sensor_read = int(peripherals_list.DUTMLB.get_sensors().nozzle_position_centideg)
         if Nozzle_sensor_read > 36000 or Nozzle_sensor_read < 0:
-            return GetNozzleHomePositionResult(test_status = self.ERRORS.get("NotValid") + f" at {Nozzle_sensor_read/100}°", step_start_time = startTime, N_Offset_calc = nozzleOffset, N_offset_MLB = new_saved_MLB)
+            return SendNozzleHomeResult(test_status = self.ERRORS.get("NotValid") + f" at {Nozzle_sensor_read/100}°", step_start_time = startTime, N_Offset_calc = nozzleOffset, N_offset_MLB = new_saved_MLB)
         nozzleOffset = (saved_MLB + Nozzle_sensor_read) % 36000
         peripherals_list.DUTMLB.set_nozzle_home_centidegrees(nozzleOffset)
         peripherals_list.DUTsprinkler.nozzleOffset = nozzleOffset
         new_saved_MLB = int(peripherals_list.DUTMLB.get_nozzle_home_centidegrees().number)
         if new_saved_MLB == nozzleOffset:
-            return GetNozzleHomePositionResult(test_status = f"±Nozzle Home Position  喷嘴归0位置: {nozzleOffset/100}°", step_start_time = startTime, N_Offset_calc = nozzleOffset, N_offset_MLB = new_saved_MLB)
+            return SendNozzleHomeResult(test_status = f"±Nozzle Home Position  喷嘴归0位置: {nozzleOffset/100}°", step_start_time = startTime, N_Offset_calc = nozzleOffset, N_offset_MLB = new_saved_MLB)
         else:
-            return GetNozzleHomePositionResult(test_status = f"OtO saved nozzle position {nozzleOffset/100}° doesn't match with computer value {new_saved_MLB/100}°.\n洒水器保存的喷嘴位置与电脑规定值不符", step_start_time = startTime, N_Offset_calc = nozzleOffset, N_offset_MLB = new_saved_MLB)
+            return SendNozzleHomeResult(test_status = f"OtO saved nozzle position {nozzleOffset/100}° doesn't match with computer value {new_saved_MLB/100}°.\n洒水器保存的喷嘴位置与电脑规定值不符", step_start_time = startTime, N_Offset_calc = nozzleOffset, N_offset_MLB = new_saved_MLB)
 
-class GetNozzleHomePositionResult(TestResult):
+class SendNozzleHomeResult(TestResult):
     def __init__(self, test_status: Union[str, None], step_start_time: float, N_Offset_calc: int,N_offset_MLB:int):
         super().__init__(test_status, step_start_time)
         self.N_Offset_calc = N_Offset_calc
@@ -852,204 +851,39 @@ class NozzleRotationTestWithSubscribeResult(TestResult):
         self.Friction_Points = Friction_Points
         self.Nozzle_Rotation_Data = Nozzle_Rotation_Data
 
-class PrintBoxLabel(TestStep):
-    ERRORS: Dict[str,str] = {"No Printer": 'Unable to locate printer "ZDesigner ZD421-300dpi ZPL BOX".',
-                             "No File": "Unable to locate default label file.",
-                             "Undocumented SKU": "No SKU found for this BOM."
-                             }
-    def __init__(self, name: str , number_of_prints: int, parent: tk):
-        super().__init__(name, parent)
-        self.number_of_prints = number_of_prints
-
-    def run_step(self, peripherals_list: TestPeripherals):
-        startTime = timeit.default_timer()
-        try:
-            if socket.gethostname() in KK_LAPTOP_LIST:
-                peripherals_list.DUTsprinkler.batchNumber = getBatchFirebase.main(targetDeviceID=peripherals_list.DUTsprinkler.deviceID)
-            with open(file=str(pathlib.Path(__file__).parent / 'Label Printing'/ r"OtO box Rework UPC BOM label.prn"),encoding='utf-8',errors='ignore') as default_label:
-                # Grab ZPL Text
-                zpl_text = default_label.read() # expected to be a byte string at the very end?
-                # Find All Fields and Replace
-                sku_pattern = re.compile(re.escape("<SKU>"))
-                if "6014-G" in peripherals_list.DUTsprinkler.bomNumber:
-                    peripherals_list.DUTsprinkler.SKU = "5102-D"
-                elif "6014-H" in peripherals_list.DUTsprinkler.bomNumber:
-                    peripherals_list.DUTsprinkler.SKU = "5102-E"
-                elif "6014-J" in peripherals_list.DUTsprinkler.bomNumber:
-                    peripherals_list.DUTsprinkler.SKU = "5102-F"
-                elif peripherals_list.DUTsprinkler.bomNumber == "6014-K1":
-                    peripherals_list.DUTsprinkler.SKU = "5102-G"
-                elif peripherals_list.DUTsprinkler.bomNumber == "6014-L":
-                    peripherals_list.DUTsprinkler.SKU = "5102-H"
-                elif peripherals_list.DUTsprinkler.bomNumber == "6014-M":
-                    peripherals_list.DUTsprinkler.SKU = "5102-J"
-                elif peripherals_list.DUTsprinkler.bomNumber == "6014-N":
-                    peripherals_list.DUTsprinkler.SKU = "5102-K"
-                elif peripherals_list.DUTsprinkler.bomNumber == "6014-NT":
-                    peripherals_list.DUTsprinkler.SKU = "5102-KT"
-                elif peripherals_list.DUTsprinkler.bomNumber == "6014-P":
-                    peripherals_list.DUTsprinkler.SKU = "5102-L"
-                elif peripherals_list.DUTsprinkler.bomNumber == "6014-PT":
-                    peripherals_list.DUTsprinkler.SKU = "5102-LT"
-                elif peripherals_list.DUTsprinkler.bomNumber == "6014-R":
-                    peripherals_list.DUTsprinkler.SKU = "5102-M"
-                elif peripherals_list.DUTsprinkler.bomNumber == "6014-RT":
-                    peripherals_list.DUTsprinkler.SKU = "5102-MT"
-                elif peripherals_list.DUTsprinkler.bomNumber == "6014-T":
-                    peripherals_list.DUTsprinkler.SKU = "5102-N"
-                else:
-                    return PrintBoxLabelResult(test_status=self.ERRORS.get("Undocumented OtO Unit Type / BOM number"), step_start_time= startTime)
-                zpl_text = sku_pattern.sub(peripherals_list.DUTsprinkler.SKU, zpl_text)
-                batch_pattern = re.compile(re.escape("<mfg>"))
-                zpl_text = batch_pattern.sub(peripherals_list.DUTsprinkler.batchNumber, zpl_text)
-                FCCIDandIC_pattern = re.compile(re.escape("<R>"))
-                bomSuffix = "F"
-                zpl_text = FCCIDandIC_pattern.sub(bomSuffix, zpl_text)
-                default_label.close()
-                # Create Zebra Object (see zebra library)
-                zebra_printer = Zebra()
-                # Check Printer Exists
-                if ('ZDesigner ZD421-300dpi ZPL BOX' in zebra_printer.getqueues()):
-                    for print_instances in range(self.number_of_prints):
-                        zebra_printer.setqueue('ZDesigner ZD421-300dpi ZPL BOX')
-                        zebra_printer.output(commands = zpl_text, encoding='utf-8')
-                else:
-                    return PrintBoxLabelResult(test_status = self.ERRORS.get("No Printer"), step_start_time = startTime)
-        except IOError or FileNotFoundError:
-            return PrintBoxLabelResult(test_status=self.ERRORS.get("No File"),step_start_time = startTime)
-        return PrintBoxLabelResult(test_status = None, step_start_time = startTime)
-
-class PrintBoxLabelResult(TestResult):
-
-    def __init__(self, test_status: Union[str, None], step_start_time: float):
-        super().__init__(test_status, step_start_time)
-
-class PrintDeviceLabel(TestStep):
-    ERRORS: Dict[str,str] = {"No Printer": 'Unable to locate printer "ZDesigner ZD420-300dpi ZPL", "ZDesigner ZD421-300dpi ZPL" or "ZDesigner ZD421CN-300dpi ZPL".\n无法找到打印机“Zdesigner ZD420-300dpi ZPL" 或者"Zdesiginer ZD421-300dpi ZPL", "ZDesigner ZD421CN-300dpi ZPL"',
-                             "No File": "Unable to locate label file.  无法找到标贴文件"
-                             }
-    def __init__(self, name: str , number_of_prints: int, parent: tk):
-        super().__init__(name, parent)
-        self.number_of_prints = number_of_prints
-
-    def run_step(self, peripherals_list: TestPeripherals):
-        startTime = timeit.default_timer()
-        if socket.gethostname() in KK_LAPTOP_LIST:
-            peripherals_list.DUTsprinkler.batchNumber = getBatchFirebase.main(targetDeviceID = peripherals_list.DUTsprinkler.deviceID)
-        CurrentBOM = peripherals_list.DUTsprinkler.bomNumber
-        if len(CurrentBOM) < 6 or CurrentBOM[0:4] not in "6014 6114 6214":
-            return PrintDeviceLabelResult(test_status = f"OtO has invalid BOM, can't print 洒水器的BOM号无效,无法打印: {CurrentBOM}", step_start_time = startTime)            
-        if CurrentBOM[5] < "L" and CurrentBOM[0:4] == "6014":
-            printfile = "ZD 2022 Lid Label MAC.prn"
-        else:
-            printfile = "ZD 2024 Lid Label MAC.prn"
-        try:
-            with open(file = str(pathlib.Path(__file__).parent / "Label Printing"/ printfile), encoding = "utf-8", errors = "ignore") as default_label:
-                # Grab ZPL Text
-                zpl_text = default_label.read() # expected to be a byte string at the very end?
-                # Find All Fields and Replace
-                device_pattern = re.compile(re.escape("<DEVICEID>"))
-                zpl_text = device_pattern.sub(peripherals_list.DUTsprinkler.deviceID, zpl_text)
-                bom_pattern = re.compile(re.escape("<BOM>"))
-                zpl_text = bom_pattern.sub(peripherals_list.DUTsprinkler.bomNumber, zpl_text)
-                batch_pattern = re.compile(re.escape("<D>"))
-                zpl_text = batch_pattern.sub(peripherals_list.DUTsprinkler.batchNumber, zpl_text)
-                MAC_pattern = re.compile(re.escape("<MAC>"))
-                zpl_text = MAC_pattern.sub(peripherals_list.DUTsprinkler.macAddress, zpl_text)
-                default_label.close()
-                # Create Zebra Object (see zebra library)
-                zebra_printer = Zebra()
-                # Check Printer Exists
-                if ('ZDesigner ZD420-300dpi ZPL' in zebra_printer.getqueues()):
-                    for print in range(self.number_of_prints):
-                        zebra_printer.setqueue("ZDesigner ZD420-300dpi ZPL")
-                        zebra_printer.output(commands = zpl_text, encoding = "utf-8")
-                        peripherals_list.DUTsprinkler.Printed = True
-                elif ('ZDesigner ZD421-300dpi ZPL' in zebra_printer.getqueues()):
-                    for print in range(self.number_of_prints):
-                        zebra_printer.setqueue("ZDesigner ZD421-300dpi ZPL")
-                        zebra_printer.output(commands = zpl_text, encoding = "utf-8")
-                        peripherals_list.DUTsprinkler.Printed = True
-                elif ('ZDesigner ZD421CN-300dpi ZPL' in zebra_printer.getqueues()):
-                    for print in range(self.number_of_prints):
-                        zebra_printer.setqueue("ZDesigner ZD421CN-300dpi ZPL")
-                        zebra_printer.output(commands = zpl_text, encoding = "utf-8")
-                        peripherals_list.DUTsprinkler.Printed = True
-                else:
-                    return PrintDeviceLabelResult(test_status = self.ERRORS.get("No Printer"), step_start_time = startTime)
-        except IOError or FileNotFoundError:
-            return PrintDeviceLabelResult(test_status = self.ERRORS.get("No File"), step_start_time = startTime)
-        except Exception as e:
-            return PrintDeviceLabelResult(test_status = str(e), step_start_time = startTime)
-        return PrintDeviceLabelResult(test_status = None, step_start_time = startTime)
-
-class PrintDeviceLabelResult(TestResult):
-
-    def __init__(self, test_status: Union[str, None], step_start_time: float):
-        super().__init__(test_status, step_start_time)
-
-class SetUnitName(TestStep):
-    ERRORS: dict = {"Cloud Failed": "OtO unit name function failed.  洒水器产品号功能失效",
-                    "Blank BOM": "OtO computer doesn't have a BOM, can't be reworked.\n洒水器电脑里没有找到BOM号文件,无法返工",
-                    "Can't Write": "Error writing BOM to OtO.  BOM号写入洒水器错误",
-                    "No Device ID": "OtO doesn't have a unit name, can't be reworked.\n ,无法返工",
-                    "No Voltage Calibration": "OtO wasn't voltage calibrated, must be reflashed with a 4.1V power supply\n洒水器没有进行电压校对。必须要使用4.1V电压重新烧录程序。"}
+class GetUnitName(TestStep):
+    ERRORS: dict = {"Cloud Failed": "OtO unit name function failed.",
+                    "Blank BOM": "OtO computer doesn't have a BOM, can't be tested.",
+                    "Can't Write": "Error writing BOM to OtO.",
+                    "No Device ID": "OtO doesn't have a unit name, won't check Firebase"}
 
     def run_step(self, peripherals_list: TestPeripherals):
         startTime = timeit.default_timer()
         Firmware = peripherals_list.DUTsprinkler.Firmware
         self.parent.labelFirmware.configure(text = Firmware)
         self.parent.labelFirmware.update()
-        # If there isn't a BOM write the one given by BOMtoFlash.txt and confirm it writes, otherwise use the BOM on the board
+        # If there isn't a BOM stop and error out
         try:
             peripherals_list.DUTsprinkler.bomNumber = peripherals_list.DUTMLB.get_device_hardware_version().string
         except Exception as e:
-            if globalvars.KenakoreBOM not in globalvars.BOMtoFlash:  #Rework units MUST have a BOM, Kenakore will have "Kenakore" in BOMtoFlash.txt
-                try:  # confirm board has been voltage calibrated before continuing
-                    peripherals_list.DUTMLB.get_calibration_voltages().calib_4v1
-                except Exception as f:  # board was not voltage calibrated, quit
-                    return SetUnitNameResult(test_status = self.ERRORS.get("No Voltage Calibration"), step_start_time = startTime)
-                if "-v4" in Firmware:
-                    if globalvars.BOMtoFlash[0:4] not in "6114":
-                        return SetUnitNameResult(test_status = "BOM must be 6114 for v4 firmware", step_start_time = startTime)
-                    elif "-C8" in peripherals_list.DUTsprinkler.Firmware and globalvars.BOMtoFlash[5] < "G":
-                        return SetUnitNameResult(test_status = f"BOM must be 6114-G or later for firmware {peripherals_list.DUTsprinkler.Firmware}", step_start_time = startTime)
-                    elif globalvars.BOMtoFlash > "6114-F" and "-C8" not in Firmware:
-                        return SetUnitNameResult(test_status = f"BOM must be 6114-F or earlier for non C8 firmware {peripherals_list.DUTsprinkler.Firmware}", step_start_time = startTime)
-                elif "-v5" in Firmware:
-                    if globalvars.BOMtoFlash[0:4] not in "6214":
-                        return SetUnitNameResult(test_status = "BOM must be 6214 for v5 firmware", step_start_time = startTime)
-                else:
-                    return SetUnitNameResult(test_status = f"Unknown firmware version {peripherals_list.DUTsprinkler.Firmware}", step_start_time = startTime)
-                try: # write new BOM
-                    peripherals_list.DUTMLB.set_device_hardware_version(globalvars.BOMtoFlash)
-                except Exception as f:
-                    return SetUnitNameResult(test_status = self.ERRORS.get("Can't Write"), step_start_time = startTime)
-                try:
-                    peripherals_list.DUTsprinkler.bomNumber = peripherals_list.DUTMLB.get_device_hardware_version().string
-                except Exception as f:
-                    return SetUnitNameResult(test_status = self.ERRORS.get("Can't Write") + str(f), step_start_time = startTime)
-                if peripherals_list.DUTsprinkler.bomNumber != globalvars.BOMtoFlash:
-                    return SetUnitNameResult(test_status = self.ERRORS.get("Can't Write") + str(f), step_start_time = startTime)
-            else:
-                return SetUnitNameResult(test_status = self.ERRORS.get("Blank BOM") + str(e), step_start_time = startTime)
+            return GetUnitNameResult(test_status = self.ERRORS.get("Blank BOM") + str(e), step_start_time = startTime)
         # Update the BOM displayed on the screen
         existingBOM = peripherals_list.DUTsprinkler.bomNumber
         self.parent.text_bom_number.delete(1.0,tk.END)
         self.parent.text_bom_number.insert(tk.END, existingBOM)
         self.parent.text_bom_number.update()
-        # check for an existing unit name on the board. If there isn't one call the cloud function to pull one.
+        # check for an existing unit name on the board. If there isn't one just use the MAC address.
         try:
             existingSerial = peripherals_list.DUTMLB.get_device_id().string
             if len(existingSerial) == 0:
                 existingSerial = None
         except Exception as e:
-            if globalvars.KenakoreBOM in globalvars.BOMtoFlash:
-                return SetUnitNameResult(test_status = self.ERRORS.get("No Device ID") + str(e), step_start_time = startTime)
-            existingSerial = None
-        ReturnMessage = self.otoGenerateSerialRequest(peripherals_list = peripherals_list, existingSerial = existingSerial)
-        if ReturnMessage != None:
-            return SetUnitNameResult(test_status = ReturnMessage, step_start_time = startTime)
+            return GetUnitNameResult(test_status = self.ERRORS.get("No Device ID") + str(e), step_start_time = startTime)
+        
+        if existingSerial != None:
+            ReturnMessage = self.otoGenerateSerialRequest(peripherals_list = peripherals_list, existingSerial = existingSerial)
+            if ReturnMessage != None:
+                return GetUnitNameResult(test_status = ReturnMessage, step_start_time = startTime)
         existingSerial = peripherals_list.DUTsprinkler.deviceID
         self.parent.text_device_id.delete(1.0, tk.END)
         self.parent.text_device_id.insert(tk.END, existingSerial)
@@ -1058,11 +892,11 @@ class SetUnitName(TestStep):
             if existingSerial[0:3] == "oto" and len(existingSerial) == 10 and existingSerial[3:10].isnumeric():  # is the Device ID valid?
                 EstablishLoggingLocation(name = None, folder_name = None, csv_file_name = None, parent = self.parent).run_step(peripherals_list = peripherals_list)
                 self.parent.text_console_logger(f"{existingSerial}, {existingBOM}, {peripherals_list.DUTsprinkler.macAddress}")
-                return SetUnitNameResult(test_status = None, step_start_time = startTime)
+                return GetUnitNameResult(test_status = None, step_start_time = startTime)
             else: # Invalid unit name
-                return SetUnitNameResult(test_status = f"Invalid unit name 洒水器产品号无效: {existingSerial}", step_start_time = startTime)                
+                return GetUnitNameResult(test_status = f"Invalid unit name 洒水器产品号无效: {existingSerial}", step_start_time = startTime)                
         else:
-            return SetUnitNameResult(test_status = self.ERRORS.get("No Device ID"), step_start_time = startTime)
+            return GetUnitNameResult(test_status = self.ERRORS.get("No Device ID"), step_start_time = startTime)
         
     def otoGenerateSerialRequest(self, peripherals_list: TestPeripherals, existingSerial: str = None):
         "Send HTTP request to oto-generate-unit function, optionally using given unit name. Args: existingSerial (optional): given unit name if required. Returns: None if OK, otherwise error as String"
@@ -1132,7 +966,7 @@ class SetUnitName(TestStep):
             self.parent.text_console_logger(f"Matched unit name with Firebase  已与数据库匹配产品号: {newserial}")            
         return None
     
-class SetUnitNameResult(TestResult):
+class GetUnitNameResult(TestResult):
     def __init__(self, test_status, step_start_time):
         super().__init__(test_status, step_start_time)
 
@@ -1273,7 +1107,7 @@ class TestMoesFullyOpen(TestStep):
                 peripherals_list.DUTsprinkler.ZeroPressure_Temp.clear()
                 peripherals_list.gpioSuite.airSolenoidPin.set(0) # turn on air
                 time.sleep(0.3)  # give some time to build pressure
-                result = EstablishZeroPressure(name = "Fully Open Test 阀门全打开测试", data_collection_time = dataCollectionTime , class_function= "MFO_test" , valve_target = target, parent = self.parent).run_step(peripherals_list)
+                result = PressureCheck(name = "Fully Open Test 阀门全打开测试", data_collection_time = dataCollectionTime , class_function= "MFO_test" , valve_target = target, parent = self.parent).run_step(peripherals_list)
                 peripherals_list.gpioSuite.airSolenoidPin.set(1) # turn off air
                 if peripherals_list.DUTsprinkler.ZeroPressure_Temp:
                     pressure_reading_list = peripherals_list.DUTsprinkler.ZeroPressure_Temp
@@ -1470,7 +1304,7 @@ class TestSolar(TestStep):
         peripherals_list.DUTsprinkler.solarCurrent = solarCurrent
         peripherals_list.gpioSuite.ledPanelPin.set(1)  #turn off LED 
         if self.PASS_CURRENT <= solarCurrent <= self.MAX_CURRENT:
-            return TestSolarResult(test_status = f"±Solar Panel  测试太阳能板 {solarCurrent}mA", step_start_time = startTime, pass_criteria = self.PASS_CURRENT, actual_current = solarCurrent, actual_voltage = 0)
+            return TestSolarResult(test_status = f"±Solar Panel {solarCurrent}mA", step_start_time = startTime, pass_criteria = self.PASS_CURRENT, actual_current = solarCurrent, actual_voltage = 0)
         elif solarCurrent >= self.MAX_CURRENT:
             return TestSolarResult(test_status = self.ERRORS.get("Solar AboveC") + f"{solarCurrent}mA", step_start_time = startTime, pass_criteria = self.PASS_CURRENT, actual_current = solarCurrent, actual_voltage = 0)
         elif solarCurrent < self.PASS_CURRENT and solarCurrent != 0:

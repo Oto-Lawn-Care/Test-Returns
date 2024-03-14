@@ -28,6 +28,7 @@ class LogFileLocationError(Exception):
     pass
 
 class MainWindow(tk.Tk): 
+    ProgramVersion = "v0.5"
     BAD_COLOUR = "RED"
     GOOD_COLOUR = "GREEN"
     IN_PROCESS_COLOUR = "YELLOW"
@@ -40,30 +41,28 @@ class MainWindow(tk.Tk):
     def __init__(self):
         tk.Tk.__init__(self)
         self.tk.call("tk", "scaling", 1.33)  # needed to prevent graphs from growing during data updates
-        self.SCALEFACTOR = self.winfo_screenheight() / 1440  # scaling based on screen size - sized for 2160 x 1440 screen
+        self.SCALEFACTOR = self.winfo_screenwidth() / 3840  # scaling based on screen size - sized for 3840 x 2160 screen
         self.FIGSIZEX = self.FIGSIZEX * self.SCALEFACTOR  # scaled width of chart window
         self.FIGSIZEY = self.FIGSIZEY * self.SCALEFACTOR  # scaled height of chart window
         sns.set_theme(font = "Microsoft YaHei", font_scale = self.SCALEFACTOR)  # sets the default seaborn chart colours and fonts
 
         self.device_list = TestPeripherals()
-        self.test_suite = TestSuite(name="OtO END OF LINE PROGRAM  OtO检测程序 v4.5.4",
+        self.test_suite = TestSuite(name = f"OtO Unit Return Function Test {self.ProgramVersion}",
                             test_list=[
-                                SetUnitName(name = "Unit Name  设备名称", parent = self),
-                                TestBattery(name = "Battery  检查电池", parent = self),
-                                TestExternalPower(name = "OtO Charging  OtO充电", parent = self),
-                                TestPump(name = "Pump 1    1号泵", target_pump = 1, target_pump_duty = 100, parent = self),
-                                TestPump(name = "Pump 2    2号泵", target_pump = 2, target_pump_duty = 100, parent = self),
-                                TestPump(name = "Pump 3    3号泵", target_pump = 3, target_pump_duty = 100, parent = self),
-                                GetAndSaveNozzleHomePosition(name = "Nozzle Position 设置喷嘴位置", parent = self),
-                                EstablishZeroPressure(name = "Zero Pressure  检查零压力", data_collection_time = 2.1, class_function= "EOL" , valve_target = None, parent = self),
-                                ValveCalibration(name = "Valve Calibration  校准阀门", parent = self, reset = True),
-                                VerifyValveOffsetTarget(name = "Valve Closes? 验证阀门关闭", parent = self),
-                                TestMoesFullyOpen(name = "Fully Open Test 阀门全打开测试", parent = self),
-                                NozzleRotationTestWithSubscribe(name = "Nozzle Rotate  喷嘴旋转测试", parent = self),
-                                CheckVacSwitch(name = "Pump Vacuum  检查泵真空", parent = self),
-                                TestSolar(name = "Solar Panel  测试太阳能板", parent = self),
-                                CloudSaveUnitAttributes(name = "Log Information  存储信息", parent = self),
-                                PrintDeviceLabel(name = "Print Label  打印标签" , number_of_prints = 1, parent = self)
+                                GetUnitName(name = "Unit Name Check", parent = self),
+                                TestBattery(name = "Check Battery", parent = self),
+                                TestExternalPower(name = "Check OtO Charging", parent = self),
+                                TestPump(name = "Test Pump 1", target_pump = 1, target_pump_duty = 100, parent = self),
+                                TestPump(name = "Test Pump 2", target_pump = 2, target_pump_duty = 100, parent = self),
+                                TestPump(name = "Test Pump 3", target_pump = 3, target_pump_duty = 100, parent = self),
+                                SendNozzleHome(name = "Send Nozzle Home", parent = self),
+                                PressureCheck(name = "Zero Pressure Check", data_collection_time = 2.1, class_function= "EOL" , valve_target = None, parent = self),
+                                ValveCalibration(name = "Valve Calibration Comparison", parent = self, reset = True),
+                                VerifyValveOffsetTarget(name = "Verify Valve Closes", parent = self),
+                                TestMoesFullyOpen(name = "Fully Open Position Test", parent = self),
+                                NozzleRotationTestWithSubscribe(name = "Nozzle Rotation Test", parent = self),
+                                CheckVacSwitch(name = "Holds Pump Vacuum", parent = self),
+                                TestSolar(name = "Check Solar Panel", parent = self)
                                 ],  
                             test_devices = self.device_list,
                             test_type = "EOL")
@@ -72,24 +71,18 @@ class MainWindow(tk.Tk):
         self.log_file_directory: pathlib.Path = None
 
         # Fixed Window Elements
-        self.status_font = font.Font(family = "Microsoft YaHei UI", size = int(19 * self.SCALEFACTOR), weight = "normal")
-        self.smaller_font = font.Font(family = "Microsoft YaHei UI", size = int(17 * self.SCALEFACTOR), weight = "normal")
+        self.status_font = font.Font(family = "Microsoft YaHei UI", size = int(28 * self.SCALEFACTOR), weight = "normal")
+        self.smaller_font = font.Font(family = "Microsoft YaHei UI", size = int(24 * self.SCALEFACTOR), weight = "normal")
         self.winfo_toplevel().title(self.test_suite.name)
-        self.text_console = tk.Text(self, relief = "raised", border = 3, font = font.Font(family = "Microsoft YaHei UI", size = int(17 * self.SCALEFACTOR), weight = "normal"), padx = int(10 * self.SCALEFACTOR), pady = int(10 * self.SCALEFACTOR), height = 6)
-        self.GraphHolder = tk.Frame(self, bg = self.NORMAL_COLOUR, relief = "sunken", border = 3, width = int(1200 * self.SCALEFACTOR))
+        self.text_console = tk.Text(self, relief = "raised", border = 3, font = font.Font(family = "Microsoft YaHei UI", size = int(24 * self.SCALEFACTOR), weight = "normal"), padx = int(10 * self.SCALEFACTOR), pady = int(10 * self.SCALEFACTOR), height = 6)
+        self.GraphHolder = tk.Frame(self, bg = self.NORMAL_COLOUR, relief = "sunken", border = 3, width = int(2000 * self.SCALEFACTOR))
         self.GraphHolder.grid_propagate(False)
-        self.label_batch_number = tk.Label(self, text = "Batch 批号:", font = self.status_font, padx = int(5 * self.SCALEFACTOR))
-        self.label_device_id = tk.Label(self, text = "Unit Name:\n设备名称", font = self.smaller_font, padx = int(5 * self.SCALEFACTOR))
+        self.label_device_id = tk.Label(self, text = "Unit Name:", font = self.smaller_font, padx = int(5 * self.SCALEFACTOR))
         self.text_device_id = tk.Text(self, width = 10, font = self.status_font, height = 1, padx = int(5 * self.SCALEFACTOR), pady = int(5 * self.SCALEFACTOR))
         self.label_bom_number = tk.Label(self, text = "BOM:", font = self.smaller_font, padx = int(5 * self.SCALEFACTOR))
         self.text_bom_number = tk.Text(self, width = 10, font = self.status_font, height = 1, padx = int(5 * self.SCALEFACTOR), pady = int(5 * self.SCALEFACTOR))
-        self.label_new_flash = tk.Label(self, text = "NEW:\n新BOM:", font = self.smaller_font, padx = int(5 * self.SCALEFACTOR))
-        if globalvars.BOMtoFlash == globalvars.KenakoreBOM:
-            self.label2_new_flash = tk.Label(self, text = "RMA only", font = self.status_font, padx = 10)
-        else:
-            self.label2_new_flash = tk.Label(self, text = globalvars.BOMtoFlash, font = self.status_font, padx = 10)
-        self.labelFirmware = tk.Label(self, text = "", font = self.smaller_font, padx = int(5 * self.SCALEFACTOR))
-        self.labelFirmware2 = tk.Label(self, text = "Firmware\n固件", font = self.smaller_font, padx = int(5 * self.SCALEFACTOR))
+        self.labelFirmware = tk.Label(self, text = "Firmware:", font = self.smaller_font, padx = int(5 * self.SCALEFACTOR))
+        self.textFirmware = tk.Text(self, width = 10, font = self.status_font, height = 1, padx = int(5 * self.SCALEFACTOR), pady = int (5 * self.SCALEFACTOR))
 
         # Program Variables
         self.abort_test_bool: bool = False
@@ -102,23 +95,20 @@ class MainWindow(tk.Tk):
         self.all_elements = [self.status_labels, self.buttons]
 
         # Widgets: Buttons
-        self.one_button_to_rule_them_all = tk.Button(self, text = "Start    启动测试", width = 18, font = font.Font(family = "Microsoft YaHei UI", size = int(22 * self.SCALEFACTOR), weight = "bold"), pady = int(3 * self.SCALEFACTOR), bg = self.GOOD_COLOUR, fg = self.NORMAL_COLOUR, command = self.execute_tests)
-        self.turn_valve_button = tk.Button(self, text = "Turn Valve  转动阀门", width = 18, font = font.Font(family = "Microsoft YaHei UI", size = int(22 * self.SCALEFACTOR), weight = "bold"), pady = int(3 * self.SCALEFACTOR), bg = self.GOOD_COLOUR, fg = self.NORMAL_COLOUR, command = self.TurnValve90)
+        self.one_button_to_rule_them_all = tk.Button(self, text = "START", width = 16, font = font.Font(family = "Microsoft YaHei UI", size = int(36 * self.SCALEFACTOR), weight = "bold"), pady = int(5 * self.SCALEFACTOR), bg = self.GOOD_COLOUR, fg = self.NORMAL_COLOUR, command = self.execute_tests)
+        self.turn_valve_button = tk.Button(self, text = "Turn Valve 90°", width = 16, font = font.Font(family = "Microsoft YaHei UI", size = int(36 * self.SCALEFACTOR), weight = "bold"), pady = int(5 * self.SCALEFACTOR), bg = self.GOOD_COLOUR, fg = self.NORMAL_COLOUR, command = self.TurnValve90)
         self.buttons.append(self.one_button_to_rule_them_all)
         self.buttons.append(self.turn_valve_button)
 
         # Grids for placement of elements
-        self.label_batch_number.grid(row = 0, column = 0, columnspan = 2, sticky = "EW")
         self.text_console.grid(row = 0, column = 4, rowspan = 6, padx = int(5 * self.SCALEFACTOR), pady = int(5 * self.SCALEFACTOR), sticky = "NEWS")
         self.GraphHolder.grid(row = 6, column = 4, rowspan = 10, padx = int(5 * self.SCALEFACTOR), pady = 1, sticky = "NEWS")
         self.label_device_id.grid(row = 1, column = 0, sticky = "E", padx = int(10 * self.SCALEFACTOR))
         self.text_device_id.grid(row = 1, column = 1, sticky = "W", padx = int(5 * self.SCALEFACTOR), pady = int(5 * self.SCALEFACTOR))
         self.label_bom_number.grid(row = 2, column = 0, sticky = "E", padx = int(10 * self.SCALEFACTOR))
         self.text_bom_number.grid(row = 2, column = 1, sticky = "W", padx = int(5 * self.SCALEFACTOR), pady = int(5 * self.SCALEFACTOR))
-        self.label_new_flash.grid(row = 3, column = 0, sticky = "E", padx = int(10 * self.SCALEFACTOR))
-        self.label2_new_flash.grid(row = 3, column = 1, sticky = "W", padx = int(5 * self.SCALEFACTOR))
-        self.labelFirmware2.grid(row = 4, column = 0, sticky = "E", padx = int(10 * self.SCALEFACTOR))
-        self.labelFirmware.grid(row = 4, column = 1, sticky = "W", padx = int(5 * self.SCALEFACTOR))
+        self.labelFirmware.grid(row = 3, column = 0, sticky = "E", padx = int(10 * self.SCALEFACTOR))
+        self.textFirmware.grid(row = 3, column = 1, sticky = "W", padx = int(5 * self.SCALEFACTOR), pady = int(5 * self.SCALEFACTOR))
         self.one_button_to_rule_them_all.grid(row = 6, column = 1, padx = int(5 * self.SCALEFACTOR), pady = int(5 * self.SCALEFACTOR))
         self.turn_valve_button.grid(row = 9, column = 1, padx = int(5 * self.SCALEFACTOR), pady = int(5 * self.SCALEFACTOR))
 
@@ -137,19 +127,16 @@ class MainWindow(tk.Tk):
             widgets.destroy()
 
     def create_labels(self):
-        '''
-        this will take the test suite that it's given and create a tk.label for each.
-        it will initialize the position as well.
-        it stores the list of these labels so we can access and modify labels
-        '''
-        ColumnCount = 16  # number of items per column
+        "Create a tk.button for each item in the list to run, initialize the position, create a list of these buttons"
+
+        ColumnCount = 14  # number of items per column
         for count, steps in enumerate(self.test_suite.test_list):
             column_no = 3 + count // ColumnCount
             row_no = count % ColumnCount
-            setattr(self, steps.name, tk.Button(self, borderwidth = 3, relief = "sunken", text = steps.name, bg = self.NORMAL_COLOUR, font = self.status_font, padx = int(10 * self.SCALEFACTOR), pady = int(10 * self.SCALEFACTOR), width = 25, command = lambda x=count : self.OneTestButton(x)))
+            setattr(self, steps.name, tk.Button(self, borderwidth = 3, relief = "sunken", text = steps.name, bg = self.NORMAL_COLOUR, font = self.status_font, padx = int(3 * self.SCALEFACTOR), pady = int(3 * self.SCALEFACTOR), width = 24, wraplength = 560 * self.SCALEFACTOR, height = 2, command = lambda x=count : self.OneTestButton(x)))
             temp = getattr(self, steps.name)
             self.status_labels.append(temp)
-            temp.grid(row = row_no, column = column_no, sticky = "EW", padx = int(3 * self.SCALEFACTOR), pady = int(3 * self.SCALEFACTOR))
+            temp.grid(row = row_no, column = column_no, sticky = "EW", padx = int(40 * self.SCALEFACTOR), pady = int(4 * self.SCALEFACTOR))
 
     def create_plot(self, window, plottype: str, xaxis, yaxis, size, name, clear):
         """creates a plot of type histogram, line, or polar in the plot frame"""
@@ -226,7 +213,7 @@ class MainWindow(tk.Tk):
         if not self.USBCheck():
             self.text_console.configure(bg = self.IN_PROCESS_COLOUR)
             self.text_console_logger("Too many USB cards attached for EOL test\n太多测试板连接到终端测试上")
-            self.one_button_to_rule_them_all.configure(text = "Start    启动测试", bg = self.GOOD_COLOUR, fg = self.NORMAL_COLOUR, command = self.execute_tests, state = "normal")
+            self.one_button_to_rule_them_all.configure(text = "START", bg = self.GOOD_COLOUR, fg = self.NORMAL_COLOUR, command = self.execute_tests, state = "normal")
             self.turn_valve_button.configure(state = "normal")
             return None
         self.test_start_time = timeit.default_timer()
@@ -250,7 +237,7 @@ class MainWindow(tk.Tk):
                     self.test_step_failure_handler(step_number = index)
                     self.test_suite.test_devices.DUTsprinkler.passTime = round((timeit.default_timer() - self.test_start_time), 4)
                     self.log_unit_data()
-                    self.one_button_to_rule_them_all.configure(text = "Start    启动测试", bg = self.GOOD_COLOUR, fg = self.NORMAL_COLOUR, command = self.execute_tests, state = "normal")
+                    self.one_button_to_rule_them_all.configure(text = "START", bg = self.GOOD_COLOUR, fg = self.NORMAL_COLOUR, command = self.execute_tests, state = "normal")
                     self.turn_valve_button.configure(state = "normal")
                     return ClosePort(self.device_list)
                 else:
@@ -264,7 +251,7 @@ class MainWindow(tk.Tk):
             if self.abort_test_bool is True:
                 self.text_console_logger(display_message="Stop button pressed, no results saved.  按下停止按钮, 未保存结果.")
                 self.text_console_logger('-----------------------Test was STOPPED   测试已停止----------------------------')
-                self.one_button_to_rule_them_all.configure(text = "Start    启动测试", bg = self.GOOD_COLOUR, fg = self.NORMAL_COLOUR, command = self.execute_tests, state = "normal")
+                self.one_button_to_rule_them_all.configure(text = "START", bg = self.GOOD_COLOUR, fg = self.NORMAL_COLOUR, command = self.execute_tests, state = "normal")
                 self.turn_valve_button.configure(state = "normal")
                 return ClosePort(self.device_list)
             else:
@@ -274,7 +261,7 @@ class MainWindow(tk.Tk):
                 self.text_console_logger("--------------------------Device PASSED  测试通过-------------------------------")
 
             # Step 6: Reset Button Status
-            self.one_button_to_rule_them_all.configure(text = "Start    启动测试", bg = self.GOOD_COLOUR, fg = self.NORMAL_COLOUR, command = self.execute_tests, state = "normal")
+            self.one_button_to_rule_them_all.configure(text = "START", bg = self.GOOD_COLOUR, fg = self.NORMAL_COLOUR, command = self.execute_tests, state = "normal")
             self.turn_valve_button.configure(state = "normal")
 
         except Exception as e:
@@ -290,7 +277,7 @@ class MainWindow(tk.Tk):
                     self.text_console_logger(display_message = str(e))
                 else:
                     self.text_console_logger(display_message = "UNEXPECTED PROGRAM ERROR!  未知程序错误")
-            self.one_button_to_rule_them_all.configure(text = "Start    启动测试", bg = self.GOOD_COLOUR, fg = self.NORMAL_COLOUR, command = self.execute_tests, state = "normal")
+            self.one_button_to_rule_them_all.configure(text = "START", bg = self.GOOD_COLOUR, fg = self.NORMAL_COLOUR, command = self.execute_tests, state = "normal")
             self.turn_valve_button.configure(state = "normal")
 
         return ClosePort(self.device_list)
@@ -311,8 +298,8 @@ class MainWindow(tk.Tk):
                 self.text_console_logger("Connecting to OtO 正在连接洒水器...")
                 new_oto = otoSprinkler()
                 self.test_suite.test_devices.add_device(new_object = new_oto)  # always reinitialize connection and create new sprinkler
-                self.labelFirmware.configure(text = self.test_suite.test_devices.DUTsprinkler.Firmware)
-                self.labelFirmware.update()
+                self.textFirmware.insert(tk.END, self.test_suite.test_devices.DUTsprinkler.Firmware)
+                self.textFirmware.update()
                 # pull info from the EOL PCB. factoryLocation and 
                 self.test_suite.test_devices.DUTsprinkler.factoryLocation, self.test_suite.test_devices.DUTsprinkler.testFixtureName = self.test_suite.test_devices.gpioSuite.getBoardInfo()
             else:
@@ -407,7 +394,7 @@ class MainWindow(tk.Tk):
             CurrentPump = 1
             for entry in self.test_result_list:
                 if entry.cycle_time > 0:
-                    if isinstance(entry, SetUnitNameResult):
+                    if isinstance(entry, GetUnitNameResult):
                         default_row["Unit Name Time"] = entry.cycle_time
                     elif isinstance(entry, TestBatteryResult):
                         default_row["Battery Time"] = entry.cycle_time
@@ -432,10 +419,10 @@ class MainWindow(tk.Tk):
                             default_row["Pump 3 Ave Current"] = self.test_suite.test_devices.DUTsprinkler.Pump3CurrentAve
                             default_row["Pump 3 Current STD"] = self.test_suite.test_devices.DUTsprinkler.Pump3CurrentSTD
                             CurrentPump += 1
-                    elif isinstance(entry, GetNozzleHomePositionResult):
+                    elif isinstance(entry, SendNozzleHomeResult):
                         default_row["Nozzle Home Time"] = entry.cycle_time
                         default_row["Nozzle Offset"] = self.test_suite.test_devices.DUTsprinkler.nozzleOffset
-                    elif isinstance(entry, EstablishZeroPressureResult):
+                    elif isinstance(entry, PressureCheckResult):
                         default_row["0 Pressure Time"] = entry.cycle_time
                         default_row["0 Pressure"] = self.test_suite.test_devices.DUTsprinkler.ZeroPressureAve
                         default_row["0 Pressure STD"] = self.test_suite.test_devices.DUTsprinkler.ZeroPressureSTD
@@ -475,12 +462,6 @@ class MainWindow(tk.Tk):
                         default_row["Solar Time"] = entry.cycle_time
                         default_row["Solar Voltage"] = self.test_suite.test_devices.DUTsprinkler.solarVoltage
                         default_row["Solar Current"] = self.test_suite.test_devices.DUTsprinkler.solarCurrent                    
-                    elif isinstance(entry, CloudSaveUnitAttributesResult):
-                        default_row["Cloud Time"] = entry.cycle_time
-                        default_row["Cloud Save"] = self.test_suite.test_devices.DUTsprinkler.CloudSave
-                    elif isinstance(entry, PrintDeviceLabelResult):
-                        default_row["Print Time"] = entry.cycle_time
-                        default_row["Printed"] = self.test_suite.test_devices.DUTsprinkler.Printed
                     else:
                         print (type(entry))
                         raise TypeError(f'Program error, unknown test specified: {entry}')
@@ -507,14 +488,14 @@ class MainWindow(tk.Tk):
             self.turn_valve_button.configure(state = "normal")
             return None
 
-        if FunctionName in "Nozzle Position 设置喷嘴位置 Pump Vacuum  检查泵真空 Log Information  存储信息 Print Label  打印标签":
+        if FunctionName in "Nozzle Position 设置喷嘴位置 Holds Pump Vacuum Log Information  存储信息 Print Label  打印标签":
             self.text_console_logger("This test cannot be run by itself.  此测试不能单独执行")
             self.status_labels[ButtonNumber].configure(bg = self.NORMAL_COLOUR, state = "normal")
             self.status_labels[ButtonNumber].update()
             self.one_button_to_rule_them_all.configure(state = "normal")
             self.turn_valve_button.configure(state = "normal")
             return None
-        elif FunctionName in "Battery  检查电池 Zero Pressure  检查零压力":  # these functions don't need control board
+        elif FunctionName in "Check Battery Zero Pressure Check":  # these functions don't need control board
             try:
                 self.text_console_logger("Connecting to OtO 正在连接洒水器...")
                 self.test_suite.test_devices.add_device(new_object = otoSprinkler())
@@ -547,7 +528,7 @@ class MainWindow(tk.Tk):
                 self.turn_valve_button.configure(state = "normal")  
             return ClosePort(self.device_list)             
         try:  # all other functions require an OtO, so try to connect to one first...
-            if FunctionName in "Pump 1    1号泵 Pump 2    2号泵 Pump 3    3号泵":
+            if FunctionName in "Test Pump 1 Test Pump 2 Test Pump 3":
                 self.vac_interrupt()
             self.initialize_devices()
             self.eol_pcb_init()
@@ -566,7 +547,7 @@ class MainWindow(tk.Tk):
             self.one_button_to_rule_them_all.configure(state = "normal")
             self.turn_valve_button.configure(state = "normal")               
             return ClosePort(self.device_list)
-        if FunctionName in "Pump 1    1号泵 Pump 2    2号泵 Pump 3    3号泵":
+        if FunctionName in "Test Pump 1 Test Pump 2 Test Pump 3":
             ResultList = self.test_suite.test_list[ButtonNumber].run_step(peripherals_list=self.test_suite.test_devices)
             if not ResultList.is_passed:
                 self.status_labels[ButtonNumber].configure(bg = self.BAD_COLOUR, state = "normal")
@@ -582,7 +563,7 @@ class MainWindow(tk.Tk):
                     self.text_console_logger(display_message = ResultList.test_status[1:])
                 self.one_button_to_rule_them_all.configure(state = "normal")
                 self.turn_valve_button.configure(state = "normal")
-        elif FunctionName in "Unit Name  设备名称": 
+        elif FunctionName in "Unit Name Check": 
             ResultList = self.test_suite.test_list[ButtonNumber].run_step(peripherals_list=self.test_suite.test_devices)
             if not ResultList.is_passed:
                 self.status_labels[ButtonNumber].configure(bg = self.BAD_COLOUR, state = "normal")
@@ -599,7 +580,7 @@ class MainWindow(tk.Tk):
                 self.one_button_to_rule_them_all.configure(state = "normal")
                 self.turn_valve_button.configure(state = "normal")  
             return ClosePort(self.device_list)                
-        elif FunctionName in "OtO Charging  OtO充电":  # get BOM and battery voltage to determine limits
+        elif FunctionName in "Check OtO Charging":  # get BOM and battery voltage to determine limits
             ResultList = self.test_suite.test_list[1].run_step(peripherals_list=self.test_suite.test_devices)  # Battery Voltage
             if not ResultList.is_passed:
                 self.status_labels[ButtonNumber].configure(bg = self.BAD_COLOUR, state = "normal")
@@ -626,7 +607,7 @@ class MainWindow(tk.Tk):
                             self.text_console_logger(display_message = ResultList.test_status[1:])
                         self.one_button_to_rule_them_all.configure(state = "normal")
                         self.turn_valve_button.configure(state = "normal")                           
-        elif FunctionName in "Valve Calibration  校准阀门":
+        elif FunctionName in "Valve Calibration Comparison":
             ResultList = ValveCalibration(name = "Valve Calibration 校准阀门", parent = self, reset = False).run_step(peripherals_list = self.test_suite.test_devices)  # Run valve calibration
             if not ResultList.is_passed:
                 self.status_labels[ButtonNumber].configure(bg = self.BAD_COLOUR, state = "normal")
@@ -644,7 +625,7 @@ class MainWindow(tk.Tk):
                 self.turn_valve_button.configure(state = "normal")                           
                 if ResultList.test_status != None:
                     self.text_console_logger(display_message = ResultList.test_status[1:])
-        elif FunctionName in "Valve Closes? 验证阀门关闭 Fully Open Test 阀门全打开测试 Nozzle Rotate  喷嘴旋转测试":  # must turn air on and off to run these commands
+        elif FunctionName in "Verify Valve Closes Fully Open Position Test Nozzle Rotation Test":  # must turn air on and off to run these commands
             ResultList = self.test_suite.test_list[ButtonNumber].run_step(peripherals_list=self.test_suite.test_devices)  # Run selected test
             if not ResultList.is_passed:
                 self.status_labels[ButtonNumber].configure(bg = self.BAD_COLOUR, state = "normal")
@@ -660,7 +641,7 @@ class MainWindow(tk.Tk):
                     self.text_console_logger(display_message = ResultList.test_status[1:])
                 self.one_button_to_rule_them_all.configure(state = "normal")
                 self.turn_valve_button.configure(state = "normal")
-        elif FunctionName in "Solar Panel  测试太阳能板":
+        elif FunctionName in "Check Solar Panel":
             ResultList = self.test_suite.test_list[ButtonNumber].run_step(peripherals_list=self.test_suite.test_devices)  # Solar Panel Test
             if not ResultList.is_passed:
                 self.status_labels[ButtonNumber].configure(bg = self.BAD_COLOUR, state = "normal")
@@ -687,7 +668,7 @@ class MainWindow(tk.Tk):
         self.text_console.update()
         self.text_device_id.delete(1.0, tk.END)
         self.text_bom_number.delete(1.0, tk.END)
-        self.labelFirmware.configure(text = "")
+        self.textFirmware.delete(1.0, tk.END)
         self.text_device_id.update()
         self.clear_plot()
         ClearFigures()
@@ -754,7 +735,7 @@ class MainWindow(tk.Tk):
                 else:
                     self.text_console_logger(display_message = "UNEXPECTED PROGRAM ERROR!  未知程序错误")
             self.one_button_to_rule_them_all.configure(state = "normal")
-            self.turn_valve_button.configure(text = "Turn Valve  转动阀门", bg = self.GOOD_COLOUR, command = self.TurnValve90, state = "normal") 
+            self.turn_valve_button.configure(text = "Turn Valve 90°", bg = self.GOOD_COLOUR, command = self.TurnValve90, state = "normal") 
             return ClosePort(self.device_list)
 
         try:
@@ -764,7 +745,7 @@ class MainWindow(tk.Tk):
             if ReturnMessage.message_type_string != "CTRL_OUT_COMMAND_COMPLETE":
                 self.text_console.configure(bg = self.BAD_COLOUR)
                 self.text_console_logger("Valve turn was NOT successful.")
-                self.turn_valve_button.configure(text = "Turn Valve  转动阀门", bg = self.GOOD_COLOUR, command = self.TurnValve90, state = "normal")
+                self.turn_valve_button.configure(text = "Turn Valve 90°", bg = self.GOOD_COLOUR, command = self.TurnValve90, state = "normal")
                 self.one_button_to_rule_them_all.configure(state = "normal")            
                 return ClosePort(self.device_list)
         except Exception as e:
@@ -777,11 +758,11 @@ class MainWindow(tk.Tk):
                     self.text_console_logger(display_message = str(e))
                 else:
                     self.text_console_logger(display_message = "UNEXPECTED PROGRAM ERROR!  未知程序错误")
-            self.turn_valve_button.configure(text = "Turn Valve  转动阀门", bg = self.GOOD_COLOUR, command = self.TurnValve90, state = "normal")
+            self.turn_valve_button.configure(text = "Turn Valve 90°", bg = self.GOOD_COLOUR, command = self.TurnValve90, state = "normal")
             self.one_button_to_rule_them_all.configure(state = "normal")            
             return ClosePort(self.device_list)
         self.text_console_logger(display_message = "Valve successfully turned.  球阀旋转成功")
-        self.turn_valve_button.configure(text = "Turn Valve  转动阀门", bg = self.GOOD_COLOUR, command = self.TurnValve90, state = "normal")
+        self.turn_valve_button.configure(text = "Turn Valve 90°", bg = self.GOOD_COLOUR, command = self.TurnValve90, state = "normal")
         self.one_button_to_rule_them_all.configure(state = "normal")
         return ClosePort(self.device_list)
 
@@ -831,16 +812,6 @@ def ClosePort(DeviceList: TestPeripherals):
 
 if __name__ == '__main__':
     ctypes.windll.shcore.SetProcessDpiAwareness(1)  # gets rid of the fuzzies on graphics display
-    try:
-        BOMFile = open("BOM to Flash.txt")
-    except:
-        msgBox.showerror(title = "BOM File Missing  缺少BOM表", message = 'Cannot find "BOM to Flash.txt" file\n未发现“BOM to Flash.txt“文件')
-        quit()
-    globalvars.BOMtoFlash = BOMFile.readline()
-    BOMFile.close()
-    if globalvars.BOMtoFlash != globalvars.KenakoreBOM and (len(globalvars.BOMtoFlash) < 6 or len(globalvars.BOMtoFlash) > 7 or globalvars.BOMtoFlash[4] != "-"):
-        msgBox.showerror(title = "Invalid BOM Number  BOM 号不存在", message = globalvars.BOMtoFlash + "\nBOM must be ####-a? format\nBOM 号必须是 ####-a格式")
-        quit()
     Application = MainWindow()
     Application.state('zoomed')
     Application.grid()
