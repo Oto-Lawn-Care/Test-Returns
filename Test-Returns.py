@@ -133,7 +133,7 @@ class MainWindow(tk.Tk):
         for count, steps in enumerate(self.test_suite.test_list):
             column_no = 3 + count // ColumnCount
             row_no = count % ColumnCount
-            setattr(self, steps.name, tk.Button(self, borderwidth = 3, relief = "sunken", text = steps.name, bg = self.NORMAL_COLOUR, font = self.status_font, padx = int(3 * self.SCALEFACTOR), pady = int(3 * self.SCALEFACTOR), width = 24, wraplength = 560 * self.SCALEFACTOR, height = 2, command = lambda x=count : self.OneTestButton(x)))
+            setattr(self, steps.name, tk.Button(self, borderwidth = 3, relief = "sunken", text = steps.name, bg = self.NORMAL_COLOUR, font = self.status_font, padx = int(3 * self.SCALEFACTOR), pady = int(3 * self.SCALEFACTOR), width = 24, wraplength = 520 * self.SCALEFACTOR, height = 2, command = lambda x=count : self.OneTestButton(x)))
             temp = getattr(self, steps.name)
             self.status_labels.append(temp)
             temp.grid(row = row_no, column = column_no, sticky = "EW", padx = int(40 * self.SCALEFACTOR), pady = int(4 * self.SCALEFACTOR))
@@ -200,7 +200,7 @@ class MainWindow(tk.Tk):
             return None  # running another test, so don't start a new one
         else:
             self.turn_valve_button.configure(state = "disabled") # prevent button from working
-            self.one_button_to_rule_them_all.configure(text = "STOP  停止测试", bg = self.IN_PROCESS_COLOUR, fg = "BLACK", command = self.abort_test, state = "normal") 
+            self.one_button_to_rule_them_all.configure(text = "STOP", bg = self.IN_PROCESS_COLOUR, fg = "BLACK", command = self.abort_test, state = "normal") 
             self.one_button_to_rule_them_all.update()
 
         # Step 1: Reinitialize Program Variables
@@ -212,7 +212,7 @@ class MainWindow(tk.Tk):
         self.reset_status_color()
         if not self.USBCheck():
             self.text_console.configure(bg = self.IN_PROCESS_COLOUR)
-            self.text_console_logger("Too many USB cards attached for EOL test\n太多测试板连接到终端测试上")
+            self.text_console_logger("Too many USB cards attached for EOL test")
             self.one_button_to_rule_them_all.configure(text = "START", bg = self.GOOD_COLOUR, fg = self.NORMAL_COLOUR, command = self.execute_tests, state = "normal")
             self.turn_valve_button.configure(state = "normal")
             return None
@@ -228,7 +228,6 @@ class MainWindow(tk.Tk):
 
             #Step 4: Run the test Suite
             index = 0
-            self.label_batch_number.configure(text = "Batch 批号: " + self.test_suite.test_devices.DUTsprinkler.batchNumber)
             while self.abort_test_bool is False and index < len(self.test_suite.test_list):
                 self.status_labels[index].config(bg = self.IN_PROCESS_COLOUR)
                 self.status_labels[index].update()
@@ -249,8 +248,8 @@ class MainWindow(tk.Tk):
 
             #Step 5: While Loop Complete or Escaped
             if self.abort_test_bool is True:
-                self.text_console_logger(display_message="Stop button pressed, no results saved.  按下停止按钮, 未保存结果.")
-                self.text_console_logger('-----------------------Test was STOPPED   测试已停止----------------------------')
+                self.text_console_logger(display_message="Stop button pressed, no results saved.")
+                self.text_console_logger('----------------------- Test was STOPPED ----------------------------------')
                 self.one_button_to_rule_them_all.configure(text = "START", bg = self.GOOD_COLOUR, fg = self.NORMAL_COLOUR, command = self.execute_tests, state = "normal")
                 self.turn_valve_button.configure(state = "normal")
                 return ClosePort(self.device_list)
@@ -258,7 +257,7 @@ class MainWindow(tk.Tk):
                 self.test_suite.test_devices.DUTsprinkler.passEOL = True
                 self.test_suite.test_devices.DUTsprinkler.passTime = round((timeit.default_timer() - self.test_start_time), 4)
                 self.log_unit_data()
-                self.text_console_logger("--------------------------Device PASSED  测试通过-------------------------------")
+                self.text_console_logger("--------------------------  Device PASSED  -------------------------------")
 
             # Step 6: Reset Button Status
             self.one_button_to_rule_them_all.configure(text = "START", bg = self.GOOD_COLOUR, fg = self.NORMAL_COLOUR, command = self.execute_tests, state = "normal")
@@ -269,24 +268,22 @@ class MainWindow(tk.Tk):
                 self.eol_pcb_init()  # Turns off power, air and LED
             self.text_console.configure(bg = self.IN_PROCESS_COLOUR)
             if str(e) == "Ping Failed":
-                self.text_console_logger("No OtO found. Check that the grey ribbon cable is plugged into OtO.\n未发现洒水器。检查测试板上的灰色线是否接到洒水器上")
+                self.text_console_logger("No OtO found. Check that the grey ribbon cable is plugged into OtO.")
             elif str(e) == "No Otos found on Serial Ports":
-                self.text_console_logger("No serial card found. Check that the USB communication serial card is plugged in.\n未发现测试板。检查USB通信测试板是否连接上USB接口")
+                self.text_console_logger("No serial card found. Check that the USB communication serial card is plugged in.")
             else:
                 if len(str(e)) > 0:
                     self.text_console_logger(display_message = str(e))
                 else:
-                    self.text_console_logger(display_message = "UNEXPECTED PROGRAM ERROR!  未知程序错误")
+                    self.text_console_logger(display_message = "UNEXPECTED PROGRAM ERROR!")
             self.one_button_to_rule_them_all.configure(text = "START", bg = self.GOOD_COLOUR, fg = self.NORMAL_COLOUR, command = self.execute_tests, state = "normal")
             self.turn_valve_button.configure(state = "normal")
 
         return ClosePort(self.device_list)
 
     def initialize_devices(self):
-        '''
-        Add an otoSprinkler instance, establish the gpio and i2c communications to the Cypress chip.
-        Figure out where the EOL PCB is located (MECO or OTO?) and its identity (which fixture number to help determine what testStep limits to use)
-        '''
+        "Add otoSprinkler instance, establish gpio and i2c communications to the Cypress chip"
+
         try:
             if self.test_suite.test_type == "EOL":
                 if not hasattr(self.test_suite.test_devices, "gpioSuite"):
@@ -295,7 +292,7 @@ class MainWindow(tk.Tk):
                 if not hasattr(self.test_suite.test_devices,"i2cSuite"):
                     new_i2c = I2CSuite()
                     self.test_suite.test_devices.add_device(new_object = new_i2c)
-                self.text_console_logger("Connecting to OtO 正在连接洒水器...")
+                self.text_console_logger("Connecting to OtO ...")
                 new_oto = otoSprinkler()
                 self.test_suite.test_devices.add_device(new_object = new_oto)  # always reinitialize connection and create new sprinkler
                 self.textFirmware.insert(tk.END, self.test_suite.test_devices.DUTsprinkler.Firmware)
@@ -303,15 +300,13 @@ class MainWindow(tk.Tk):
                 # pull info from the EOL PCB. factoryLocation and 
                 self.test_suite.test_devices.DUTsprinkler.factoryLocation, self.test_suite.test_devices.DUTsprinkler.testFixtureName = self.test_suite.test_devices.gpioSuite.getBoardInfo()
             else:
-                self.text_console_logger(display_message = "UNEXPECTED PROGRAM ERROR!  未知程序错误")
+                self.text_console_logger(display_message = "UNEXPECTED PROGRAM ERROR!")
         except Exception as e:
             raise Exception(e)
 
     def log_unit_data(self):
-        '''
-        logging raw data about the testSteps. required to help us determine limits for each testStep per fixture.
-        Every single testStep in the testSuite run must be added to this function otherwise it will error out
-        '''
+        "logging raw data about the testSteps. every single testStep in the testSuite run must be added to this function otherwise it will error out"
+
         write_header: bool = True
         self.establish_file_write_location()
         log_file_columns = ["Entry Time", "Device ID", "MAC Address", "Firmware", "BOM", "Batch", "Unit Name Time", "Battery", "Battery Time", "Ext Power I","Ext Power V", "Ext Power Time",
@@ -468,7 +463,7 @@ class MainWindow(tk.Tk):
             csv_writer.writerow(default_row)
     
     def OneTestButton(self, ButtonNumber):
-        """function for handling single button press for device debugging purposes"""
+        "function for handling single button press for device debugging purposes"
         if self.one_button_to_rule_them_all["state"] == "disabled" or self.turn_valve_button["state"] == "disabled":
             return None  # running another test, so don't start a new one
         else:
@@ -481,30 +476,30 @@ class MainWindow(tk.Tk):
         self.status_labels[ButtonNumber].update()
         if not self.USBCheck():
             self.text_console.configure(bg = self.IN_PROCESS_COLOUR)
-            self.text_console_logger("Too many USB cards attached for EOL test\n太多测试板连接到终端测试上")
+            self.text_console_logger("Too many USB cards attached for EOL test")
             self.status_labels[ButtonNumber].configure(bg = self.NORMAL_COLOUR, state = "normal")
             self.status_labels[ButtonNumber].update()
             self.one_button_to_rule_them_all.configure(state = "normal")
             self.turn_valve_button.configure(state = "normal")
             return None
 
-        if FunctionName in "Nozzle Position 设置喷嘴位置 Holds Pump Vacuum Log Information  存储信息 Print Label  打印标签":
-            self.text_console_logger("This test cannot be run by itself.  此测试不能单独执行")
+        if FunctionName in "Holds Pump Vacuum":
+            self.text_console_logger("This test cannot be run by itself.")
             self.status_labels[ButtonNumber].configure(bg = self.NORMAL_COLOUR, state = "normal")
             self.status_labels[ButtonNumber].update()
             self.one_button_to_rule_them_all.configure(state = "normal")
             self.turn_valve_button.configure(state = "normal")
             return None
-        elif FunctionName in "Check Battery Zero Pressure Check":  # these functions don't need control board
+        elif FunctionName in "Check Battery Zero Pressure Check Send Nozzle Home":  # these functions don't need control board
             try:
-                self.text_console_logger("Connecting to OtO 正在连接洒水器...")
+                self.text_console_logger("Connecting to OtO...")
                 self.test_suite.test_devices.add_device(new_object = otoSprinkler())
             except Exception as e:
                 self.text_console.configure(bg = self.IN_PROCESS_COLOUR)
                 if str(e) == "Ping Failed":
-                    self.text_console_logger("No OtO found. Check that the grey ribbon cable is plugged into OtO.\n未发现洒水器。检查测试板上的灰色线是否接到洒水器上")
+                    self.text_console_logger("No OtO found. Check that the grey ribbon cable is plugged into OtO.")
                 elif str(e) == "No Otos found on Serial Ports":
-                    self.text_console_logger("No serial card found. Check that the USB communication serial card is plugged in.\n未发现测试板。检查USB通信测试板是否连接上USB接口")
+                    self.text_console_logger("No serial card found. Check that the USB communication serial card is plugged in.")
                 else:
                     self.text_console_logger(display_message = str(e))
                 self.status_labels[ButtonNumber].configure(bg = self.BAD_COLOUR, state = "normal")
@@ -535,14 +530,14 @@ class MainWindow(tk.Tk):
         except Exception as e:
             self.text_console.configure(bg = self.IN_PROCESS_COLOUR)
             if str(e) == "Ping Failed":
-                self.text_console_logger("No OtO found. Check that the grey ribbon cable is plugged into OtO.\n未发现洒水器。检查测试板上的灰色线是否接到洒水器上")
+                self.text_console_logger("No OtO found. Check that the grey ribbon cable is plugged into OtO.")
             elif str(e) == "No Otos found on Serial Ports":
-                self.text_console_logger("No serial card found. Check that the USB communication serial card is plugged in.\n未发现测试板。检查USB通信测试板是否连接上USB接口")
+                self.text_console_logger("No serial card found. Check that the USB communication serial card is plugged in.")
             else:
                 if len(str(e)) > 0:
                     self.text_console_logger(display_message = str(e))
                 else:
-                    self.text_console_logger(display_message = "UNEXPECTED PROGRAM ERROR!  未知程序错误")
+                    self.text_console_logger(display_message = "UNEXPECTED PROGRAM ERROR!")
             self.status_labels[ButtonNumber].configure(bg = self.BAD_COLOUR, state = "normal")
             self.one_button_to_rule_them_all.configure(state = "normal")
             self.turn_valve_button.configure(state = "normal")               
@@ -608,7 +603,7 @@ class MainWindow(tk.Tk):
                         self.one_button_to_rule_them_all.configure(state = "normal")
                         self.turn_valve_button.configure(state = "normal")                           
         elif FunctionName in "Valve Calibration Comparison":
-            ResultList = ValveCalibration(name = "Valve Calibration 校准阀门", parent = self, reset = False).run_step(peripherals_list = self.test_suite.test_devices)  # Run valve calibration
+            ResultList = ValveCalibration(name = "Valve Calibration", parent = self, reset = False).run_step(peripherals_list = self.test_suite.test_devices)  # Run valve calibration
             if not ResultList.is_passed:
                 self.status_labels[ButtonNumber].configure(bg = self.BAD_COLOUR, state = "normal")
                 self.status_labels[ButtonNumber].update()
@@ -674,11 +669,8 @@ class MainWindow(tk.Tk):
         ClearFigures()
 
     def test_step_failure_handler(self, step_number: int):
-        '''
-        the index is required to help display the correct message and log the correct error
-        Updates the label to red in the gui, runs the cloud function to log the error in Firebase,
-        resets all the gpio pins to the OFF state
-        '''
+        "the index is required to help display the correct message and log the correct error. Updates the label to red in the gui, runs the cloud function to log the error in Firebase, resets all the gpio pins to the OFF state"
+
         error_message = self.test_result_list[step_number].test_status
         self.test_suite.test_devices.DUTsprinkler.errorStep = error_message
         self.test_suite.test_devices.DUTsprinkler.errorStepName = type(self.test_result_list[step_number]).__name__
@@ -686,12 +678,8 @@ class MainWindow(tk.Tk):
         self.status_labels[step_number].update()
         self.text_console.configure(bg = self.BAD_COLOUR)
         self.text_console_logger(display_message = error_message)
-        self.text_console_logger(display_message = "Logging OtO unit error information  记录洒水器测试错误信息，请稍等...")
-        cloudLogResult = CloudLogMfgError(name = "unit_failure", parent = self).run_step(peripherals_list = self.test_suite.test_devices)
-        if cloudLogResult.is_passed is not True:
-            self.text_console_logger(display_message = cloudLogResult.test_status)
         self.eol_pcb_init()  # Turns off power, air and LED
-        self.text_console_logger('------------------------------  DEVICE FAILED   测试不合格  -------------------------------------')
+        self.text_console_logger('---------------------------------  DEVICE FAILED  -----------------------------------------')
 
     def text_console_logger(self, display_message: str):
         """function to put text into the consle of the gui"""
@@ -700,7 +688,7 @@ class MainWindow(tk.Tk):
         self.text_console.update()
 
     def TurnValve90(self):
-        """Turns the valve 90 degrees. Open valve for the 15 psi air leak check"""
+        "Turns the valve 90 degrees. Open valve for the 15 psi air leak check"
         if self.one_button_to_rule_them_all["state"] == "disabled" or self.turn_valve_button["state"] == "disabled":
             return None
         else:
@@ -711,29 +699,29 @@ class MainWindow(tk.Tk):
         self.turn_valve_button.configure(text = "Turning...", bg = self.IN_PROCESS_COLOUR, state = "disabled")
         self.one_button_to_rule_them_all.configure(state = "disabled")
         self.text_console.configure(bg = self.NORMAL_COLOUR)
-        self.text_console_logger("Turning ball valve 90°  球阀旋转90°...")
+        self.text_console_logger("Turning ball valve 90°...")
 
         if not self.USBCheck():
             self.text_console.configure(bg = self.IN_PROCESS_COLOUR)
-            self.text_console_logger("Too many USB cards attached for EOL test\n太多测试板连接到终端测试上")
+            self.text_console_logger("Too many USB cards attached for EOL test.")
             self.one_button_to_rule_them_all.configure(state = "normal")
             self.turn_valve_button.configure(state = "normal")
             return None
 
         try:
-            self.text_console_logger("Connecting to OtO 正在连接洒水器...")
+            self.text_console_logger("Connecting to OtO...")
             self.test_suite.test_devices.add_device(new_object = otoSprinkler())
         except Exception as e:
             self.text_console.configure(bg = self.IN_PROCESS_COLOUR)
             if str(e) == "Ping Failed":
-                self.text_console_logger("No OtO found. Check that the grey ribbon cable is plugged into OtO.\n未发现洒水器。检查测试板上的灰色线是否接到洒水器上")
+                self.text_console_logger("No OtO found. Check that the grey ribbon cable is plugged into OtO.")
             elif str(e) == "No Otos found on Serial Ports":
-                self.text_console_logger("No serial card found. Check that the USB communication serial card is plugged in.\n未发现测试板。检查USB通信测试板是否连接上USB接口")
+                self.text_console_logger("No serial card found. Check that the USB communication serial card is plugged in.")
             else:
                 if len(str(e)) > 0:
                     self.text_console_logger(display_message = str(e))
                 else:
-                    self.text_console_logger(display_message = "UNEXPECTED PROGRAM ERROR!  未知程序错误")
+                    self.text_console_logger(display_message = "UNEXPECTED PROGRAM ERROR!")
             self.one_button_to_rule_them_all.configure(state = "normal")
             self.turn_valve_button.configure(text = "Turn Valve 90°", bg = self.GOOD_COLOUR, command = self.TurnValve90, state = "normal") 
             return ClosePort(self.device_list)
@@ -751,17 +739,17 @@ class MainWindow(tk.Tk):
         except Exception as e:
             self.text_console.configure(bg = self.BAD_COLOUR)
             if e == TimeoutError:
-                self.text_console_logger("OtO timed out trying to turn the valve.  洒水器尝试旋转球阀超时")
-                self.text_console_logger("Valve turn was NOT successful.  旋转球阀失败")
+                self.text_console_logger("OtO timed out trying to turn the valve.")
+                self.text_console_logger("Valve turn was NOT successful.")
             else:
                 if len(str(e)) > 0:
                     self.text_console_logger(display_message = str(e))
                 else:
-                    self.text_console_logger(display_message = "UNEXPECTED PROGRAM ERROR!  未知程序错误")
+                    self.text_console_logger(display_message = "UNEXPECTED PROGRAM ERROR!")
             self.turn_valve_button.configure(text = "Turn Valve 90°", bg = self.GOOD_COLOUR, command = self.TurnValve90, state = "normal")
             self.one_button_to_rule_them_all.configure(state = "normal")            
             return ClosePort(self.device_list)
-        self.text_console_logger(display_message = "Valve successfully turned.  球阀旋转成功")
+        self.text_console_logger(display_message = "Valve successfully turned.")
         self.turn_valve_button.configure(text = "Turn Valve 90°", bg = self.GOOD_COLOUR, command = self.TurnValve90, state = "normal")
         self.one_button_to_rule_them_all.configure(state = "normal")
         return ClosePort(self.device_list)
@@ -781,18 +769,18 @@ class MainWindow(tk.Tk):
             return True
 
     def vac_interrupt(self):
-        """checks vacuum switches are not triggered prior to testing"""
+        "checks vacuum switches are not triggered prior to testing"
         if not hasattr(self.test_suite.test_devices,"gpioSuite"):
             try:
                 new_gpio = GpioSuite()
                 self.test_suite.test_devices.add_device(new_object = new_gpio)
             except:
-                raise VacError("TEST CONTROLLER WASN'T FOUND. Is it plugged in?\n测试控制器没有找到, 是否已插入?")
+                raise VacError("TEST CONTROLLER WASN'T FOUND. Is it plugged in?")
         if self.test_suite.test_devices.gpioSuite.vacSwitchPin1.get() == 0 or self.test_suite.test_devices.gpioSuite.vacSwitchPin2.get() == 0 or self.test_suite.test_devices.gpioSuite.vacSwitchPin3.get() == 0:
-            raise VacError("Unscrew and then retighten the black, blue and orange caps before testing again.\n黑色,蓝色和橘色瓶盖未拧紧或者未拧。测试前需拧紧。")
+            raise VacError("Unscrew and then retighten the black, blue and orange caps before testing again.")
 
 def ClearFigures():
-    """clears all graphs and the memory associated with them"""
+    "clears all graphs and the memory associated with them"
     plt.figure(0)
     plt.close()
     plt.figure(1)

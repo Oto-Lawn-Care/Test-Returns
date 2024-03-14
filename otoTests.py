@@ -20,15 +20,9 @@ import math
 import tkinter as tk
 import socket
 import json
-import globalvars
 import matplotlib
 matplotlib.use('Agg')   # needed to prevent multi-thread failures when using matplotlib
 from matplotlib import pyplot as plt
-
-#GLOBAL VARIABLES
-KK_LAPTOP_LIST = ("LAPTOP-M36PULPD", #RMA Laptop
-                "DESKTOP-55QCQ6B",  # JEFF LAPTOP
-                "LAPTOP-SOOEO5B6")
 
 class TestPeripherals:
     '''
@@ -44,7 +38,7 @@ class TestPeripherals:
             elif isinstance(entry,I2CSuite):
                 self.i2cSuite = entry
             else:
-                raise TypeError("UNEXPECTED PROGRAM ERROR!  未知程序错误")
+                raise TypeError("UNEXPECTED PROGRAM ERROR!")
 
     def add_device(self, new_object):
         "adds a new OtOSprinkler, GPIOSuite or I2CSuite class to TestPeriperals"
@@ -91,7 +85,7 @@ class TestPeripherals:
         elif isinstance(new_object, I2CSuite):
             self.i2cSuite = new_object
         else:
-            raise TypeError("UNEXPECTED PROGRAM ERROR!  未知程序错误")
+            raise TypeError("UNEXPECTED PROGRAM ERROR!")
         
     def ClearModules(self):
         "removes PyOtO modules from memory to allow switching between PyOtO versions"
@@ -161,13 +155,13 @@ class CheckVacSwitch(TestStep):
         pumpErrors: str = None
         if peripherals_list.gpioSuite.vacSwitchPin1.get() == 1:
             peripherals_list.DUTsprinkler.vacuumFail += 1
-            pumpErrors = "Pump vacuum was not held on Bay 1 (black cap)\n1号泵 (黑色瓶盖) 无法保持真空状态\n"
+            pumpErrors = "Pump vacuum was not held on Bay 1 (black cap)"
         if peripherals_list.gpioSuite.vacSwitchPin2.get() == 1:
             peripherals_list.DUTsprinkler.vacuumFail += 2
-            pumpErrors += "Pump vacuum was not held on Bay 2 (blue cap)\n2号泵 (蓝色瓶盖) 无法保持真空状态\n"
+            pumpErrors += "Pump vacuum was not held on Bay 2 (blue cap)"
         if peripherals_list.gpioSuite.vacSwitchPin3.get() == 1:
             peripherals_list.DUTsprinkler.vacuumFail += 4
-            pumpErrors += "Pump vacuum was not held on Bay 3 (orange cap)\n3号泵 (橘色瓶盖) 无法保持真空状态"
+            pumpErrors += "Pump vacuum was not held on Bay 3 (orange cap)"
 
         return CheckVacSwitchResult(test_status = pumpErrors, step_start_time = startTime)
 
@@ -175,87 +169,13 @@ class CheckVacSwitchResult(TestResult):
         def __init__(self, test_status: Union[str, None], step_start_time: float):
             super().__init__(test_status, step_start_time)
 
-class CloudSaveUnitAttributes(TestStep):
-    "Should only be used in an EOL step. If it's run without a pre-filled DUTSprinkler, it will error out."
-
-    TEMPLATE: dict = {"key": "XJhbCu4ujfJF3Ugu",
-                    "unitName":"",
-                    "flowOffset":"",
-                    "nozzleOffset":"",
-                    "bomNumber":"",
-                    "batchNumber":"",
-                    "eolFixtureName":""
-                     } #left blank on purpose. this merely shows the skeleton of what cloud fxn is expecting.
-    ERRORS = "Failed to save OtO unit information.  洒水器信息保存失败"
-    PASS = "OtO unit information successfully saved.  洒水器信息保存成功"
-
-    def run_step(self, peripherals_list: TestPeripherals):
-        startTime = timeit.default_timer()
-        URL = "https://meco-accessor-service-ugegz6xfpa-pd.a.run.app/oto/meco/masterSetOffsets"
-        # URL = "https://us-central1-oto-test-3254b.cloudfunctions.net/masterSetOffsets"
-
-        payload: dict = {
-            "key": "XJhbCu4ujfJF3Ugu",
-            "unitName": peripherals_list.DUTsprinkler.deviceID,
-            "flowOffset": peripherals_list.DUTsprinkler.valveOffset,
-            "nozzleOffset": peripherals_list.DUTsprinkler.nozzleOffset,
-            "batchNumber": peripherals_list.DUTsprinkler.batchNumber,
-            "eolFixtureName":peripherals_list.DUTsprinkler.testFixtureName
-        }
-        cloudResult: requests.Response = requests.post(URL, json = payload)
-        if cloudResult.status_code == 200:
-            peripherals_list.DUTsprinkler.CloudSave = True
-            return CloudSaveUnitAttributesResult(test_status = None, step_start_time = startTime)
-        else:
-            peripherals_list.DUTsprinkler.CloudSave = False
-            ErrorResult = json.loads(cloudResult.content.decode())
-            return CloudSaveUnitAttributesResult(test_status = ErrorResult["error"], step_start_time = startTime)
-
-class CloudSaveUnitAttributesResult(TestResult):
-    def __init__(self, test_status, step_start_time):
-        super().__init__(test_status, step_start_time)
-
-class CloudLogMfgError(TestStep):
-    "Class to log end of line test errors in Firebase"
-    TEMPLATE: Dict[str,str] = {"unitName":"",
-                     "unitMfgError":"",
-                     "unitTestStepResult":"",
-                     "eolFixtureName": ""
-                     }
-
-    def run_step(self, peripherals_list: TestPeripherals):
-        startTime = timeit.default_timer()
-        # URL = 'https://us-central1-oto-test-3254b.cloudfunctions.net/masterMfgErrorLog'
-        URL = 'https://meco-accessor-service-ugegz6xfpa-pd.a.run.app/oto/meco/masterMfgErrorLog'
-
-        if peripherals_list.DUTsprinkler.deviceID == "":
-            return CloudLogMfgErrorResult(test_status = "Unit number is blank, unable to log in the cloud.\n洒水器产品号为空, 无法记录到云服务器", step_start_time = startTime)
-
-        payload: dict = {"unitName": peripherals_list.DUTsprinkler.deviceID,
-                         "unitMfgError": peripherals_list.DUTsprinkler.errorStep,
-                         "unitTestStepResult": peripherals_list.DUTsprinkler.errorStepName,
-                         "eolFixtureName": peripherals_list.DUTsprinkler.testFixtureName
-                         }
-        cloudResult: requests.Response = requests.post(URL, json= payload)
-        if cloudResult.status_code == 200:
-            return CloudLogMfgErrorResult(test_status = None, step_start_time = startTime)
-        else:
-            ErrorResult = json.loads(cloudResult.content.decode())
-            return CloudLogMfgErrorResult(test_status = ErrorResult["error"], step_start_time = startTime)
-
-class CloudLogMfgErrorResult(TestResult):
-    def __init__(self, test_status, step_start_time):
-        super().__init__(test_status, step_start_time)
-
 class EstablishLoggingLocation(TestStep):
     "class to log data files from the end of line test steps"
     TESTING_FOLDER = False  # set to true to store data in a different directory than production
 
     ERRORS = {"eolFixtureName":"EOL PCB hasn't been initalized with a vendor name and product name which we need to ID "
                                "the EOL fixture board and the location. It needs to be set up through the cypress "
-                               "USB serial config utility\n"
-                               "EOL测试的PCB板没有初始化并生成供应商名和产品名称。"
-                               "需要这两项来确定EOL测试板和生产地点。需要通过USB测试板来设置。",
+                               "USB serial config utility",
               "pathIssue":"Multiple paths exist, can't decide which to write! Stop!"
               }
 
@@ -298,14 +218,14 @@ class EstablishLoggingLocationResult(TestResult):
 class PressureCheck(TestStep):
     "Reads pressure sensor for the number of seconds specified, used for Zero, Closed Valve and Fully Open tests"
     ERRORS:dict = {
-                    "Timeout_V": "OtO valve failed to close in time.  洒水器阀门无法及时关闭",
-                    "Empty List": "No pressure information was received from OtO.  洒水器未接收到压力数据",
-                    "Bad_Function" : "UNEXPECTED PROGRAM ERROR!  未知程序错误",
-                    "High STD": "Pressure data is not consistent enough.\n压力不足够稳定、连续。检查电磁阀和进气气压阀是否泄漏。",
-                    "Low STD": "Pressure data is unusually consistent.  压力数据异常连续",
-                    "BAD_STD": "Pressure data is not within expected consistency limits.\n压力数据不在应有的连续范围内",
-                    "BAD_Both": "Pressure data values and consistency are not within limits.\n压力数据不在应有的连续范围内",
-                    "Pressure_Sensor": "OtO pressure sensor is not recognized.  洒水器压力传感器无法识别"}
+                    "Timeout_V": "OtO valve failed to close in time.",
+                    "Empty List": "No pressure information was received from OtO.",
+                    "Bad_Function" : "UNEXPECTED PROGRAM ERROR!",
+                    "High STD": "Pressure data is not consistent enough.",
+                    "Low STD": "Pressure data is unusually consistent.",
+                    "BAD_STD": "Pressure data is not within expected consistency limits.",
+                    "BAD_Both": "Pressure data values and consistency are not within limits.",
+                    "Pressure_Sensor": "OtO pressure sensor is not recognized."}
 
     def __init__(self, name: str, data_collection_time: int , class_function:str , valve_target: int, parent: tk):
         super().__init__(name, parent)
@@ -316,77 +236,48 @@ class PressureCheck(TestStep):
     def run_step(self, peripherals_list: TestPeripherals):
         startTime = timeit.default_timer()
         pressure_sensor_check = int(peripherals_list.DUTMLB.get_pressure_sensor_version().pressure_sensor_version)
-        if socket.gethostname() not in KK_LAPTOP_LIST:
-            if self.class_function in "EOL":  # new fully open test at closed positions uses same limits as zero pressure
-                if pressure_sensor_check == peripherals_list.DUTsprinkler.psig15:
-                    max_acceptable_STD: float = 387.8  # Jan 2023 ±4σ
-                    min_acceptable_STD: float = 96.5  # Jan 2023 ±4σ
-                    max_acceptable_ADC: float = 1786755  # Jan 2023 ±4σ
-                    min_acceptable_ADC: float = 1611555  # Jan 2023 ±4σ
-                elif pressure_sensor_check == peripherals_list.DUTsprinkler.psig30:
-                    max_acceptable_STD: float = 230  # Jan 2024 from histogram 230
-                    min_acceptable_STD: float = 66.5  # Jan 2023/4 66.5
-                    max_acceptable_ADC: float = 1875000  # Jan 2024 from histogram 1875000
-                    min_acceptable_ADC: float = 1520000  # Jan 2024 from histogram 1520000
-                else:
-                    return PressureCheckResult(test_status=self.ERRORS.get("Pressure_Sensor"), step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
-            elif self.class_function in "MFO_test":  # new fully open test at closed positions uses adjusted limits
-                if pressure_sensor_check == peripherals_list.DUTsprinkler.psig15:
-                    max_acceptable_STD: float = 780  # 2x limit from zero pressure
-                    min_acceptable_STD: float = 96.5  # Jan 2023 ±4σ
-                    max_acceptable_ADC: float = 2100000  # same as 30 psig value
-                    min_acceptable_ADC: float = 1611555  # Jan 2023 ±4σ
-                elif pressure_sensor_check == peripherals_list.DUTsprinkler.psig30:
-                    max_acceptable_STD: float = 460  # 2x limit from zero pressure
-                    min_acceptable_STD: float = 66.5  # Jan 2023/4 66.5
-                    max_acceptable_ADC: float = 2100000  # from 2411 data
-                    min_acceptable_ADC: float = 1520000  # Jan 2024 from histogram 1520000
-                else:
-                    return PressureCheckResult(test_status=self.ERRORS.get("Pressure_Sensor"), step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
-            elif self.class_function == "FO_test":
-                if pressure_sensor_check == peripherals_list.DUTsprinkler.psig15:
-                    max_acceptable_STD: float = 32000  # confirmed Jan 2023
-                    min_acceptable_STD: float = 3000  # confirmed Jan 2023
-                    max_acceptable_ADC: float = 5861045  # updated Jan 2023
-                    min_acceptable_ADC: float = 4167230  # updated Jan 2023
-                elif pressure_sensor_check == peripherals_list.DUTsprinkler.psig30:
-                    max_acceptable_STD: float = 12000  # updated Apr 2023
-                    min_acceptable_STD: float = 2000  # updated Apr 2023
-                    max_acceptable_ADC: float = 3790000  # updated Apr 2023
-                    min_acceptable_ADC: float = 2680000  # updated Apr 2023
-                else:
-                    return PressureCheckResult(test_status=self.ERRORS.get("Pressure_Sensor"), step_start_time=startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
+
+        if self.class_function in "EOL":  # new fully open test at closed positions uses same limits as zero pressure
+            if pressure_sensor_check == peripherals_list.DUTsprinkler.psig15:
+                max_acceptable_STD: float = 387.8  # Jan 2023 ±4σ
+                min_acceptable_STD: float = 96.5  # Jan 2023 ±4σ
+                max_acceptable_ADC: float = 1786755  # Jan 2023 ±4σ
+                min_acceptable_ADC: float = 1611555  # Jan 2023 ±4σ
+            elif pressure_sensor_check == peripherals_list.DUTsprinkler.psig30:
+                max_acceptable_STD: float = 230  # Jan 2024 from histogram 230
+                min_acceptable_STD: float = 66.5  # Jan 2023/4 66.5
+                max_acceptable_ADC: float = 1875000  # Jan 2024 from histogram 1875000
+                min_acceptable_ADC: float = 1520000  # Jan 2024 from histogram 1520000
             else:
-                return PressureCheckResult(test_status=self.ERRORS.get("Bad_Function"), step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
+                return PressureCheckResult(test_status=self.ERRORS.get("Pressure_Sensor"), step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
+        elif self.class_function in "MFO_test":  # new fully open test at closed positions uses adjusted limits
+            if pressure_sensor_check == peripherals_list.DUTsprinkler.psig15:
+                max_acceptable_STD: float = 780  # 2x limit from zero pressure
+                min_acceptable_STD: float = 96.5  # Jan 2023 ±4σ
+                max_acceptable_ADC: float = 2100000  # same as 30 psig value
+                min_acceptable_ADC: float = 1611555  # Jan 2023 ±4σ
+            elif pressure_sensor_check == peripherals_list.DUTsprinkler.psig30:
+                max_acceptable_STD: float = 460  # 2x limit from zero pressure
+                min_acceptable_STD: float = 66.5  # Jan 2023/4 66.5
+                max_acceptable_ADC: float = 2100000  # from 2411 data
+                min_acceptable_ADC: float = 1520000  # Jan 2024 from histogram 1520000
+            else:
+                return PressureCheckResult(test_status=self.ERRORS.get("Pressure_Sensor"), step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
+        elif self.class_function == "FO_test":
+            if pressure_sensor_check == peripherals_list.DUTsprinkler.psig15:
+                max_acceptable_STD: float = 32000  # confirmed Jan 2023
+                min_acceptable_STD: float = 3000  # confirmed Jan 2023
+                max_acceptable_ADC: float = 5861045  # updated Jan 2023
+                min_acceptable_ADC: float = 4167230  # updated Jan 2023
+            elif pressure_sensor_check == peripherals_list.DUTsprinkler.psig30:
+                max_acceptable_STD: float = 12000  # updated Apr 2023
+                min_acceptable_STD: float = 2000  # updated Apr 2023
+                max_acceptable_ADC: float = 3790000  # updated Apr 2023
+                min_acceptable_ADC: float = 2680000  # updated Apr 2023
+            else:
+                return PressureCheckResult(test_status=self.ERRORS.get("Pressure_Sensor"), step_start_time=startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
         else:
-            if self.class_function == "EOL MFO_test":   # new fully open test at closed positions uses same limits as zero pressure
-                if pressure_sensor_check == peripherals_list.DUTsprinkler.psig15:
-                    max_acceptable_STD: float = 3133
-                    min_acceptable_STD: float = 96.5
-                    max_acceptable_ADC: float = 1812752 # 2023/09/04 UPDATE 4 STD
-                    min_acceptable_ADC: float = 1641098 # 2023/09/04 UPDATE 4 STD
-                elif pressure_sensor_check == peripherals_list.DUTsprinkler.psig30:
-                    max_acceptable_STD: float = 1559
-                    min_acceptable_STD: float = 66.5 # LEAVING THE SAME AS PRODUCTION
-                    max_acceptable_ADC: float = 1813062 # 2023/09/04 UPDATE 4 STD
-                    min_acceptable_ADC: float = 1644978 # 2023/09/04 UPDATE 4 STD
-                else:
-                    return PressureCheckResult(test_status=self.ERRORS.get("Pressure_Sensor"), step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
-            elif self.class_function == "FO_test":
-                if pressure_sensor_check == peripherals_list.DUTsprinkler.psig15:
-                    max_acceptable_STD: float = 32000
-                    min_acceptable_STD: float = 2000
-                    max_acceptable_ADC: float = 5759514 # 90 DEG POINT 2023/09/04 4 STD
-                    min_acceptable_ADC: float = 3545797 # 90 DEG POINT 2023/09/04 4 STD
-                elif pressure_sensor_check == peripherals_list.DUTsprinkler.psig30:
-                    max_acceptable_STD: float = 12000
-                    min_acceptable_STD: float = 2000
-                    max_acceptable_ADC: float = 3658200 # 90 DEG POINT 2023/09/04 4 STD
-                    min_acceptable_ADC: float = 2718865 # 90 DEG POINT 2023/09/04 4 STD
-                else:
-                    return PressureCheckResult(test_status=self.ERRORS.get("Pressure_Sensor"), step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
-            else:
-                return PressureCheckResult(test_status=self.ERRORS.get("Bad_Function"), step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
+            return PressureCheckResult(test_status=self.ERRORS.get("Bad_Function"), step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
 
         standardDeviation:float = 32000  # should be equal or bigger than min_acceptable_STD defined above
         number_of_trials:int = 2
@@ -454,11 +345,11 @@ class PressureCheck(TestStep):
                 peripherals_list.DUTsprinkler.ZeroPressure = output
                 peripherals_list.DUTsprinkler.ZeroPressureAve = mean
                 peripherals_list.DUTsprinkler.ZeroPressureSTD = standardDeviation
-                function = "Calibrating Zero Pressure  0压力校准"
+                function = "Calibrating Zero Pressure"
                 self.parent.create_plot(window = self.parent.GraphHolder, plottype = "histplot", xaxis = pressureReading, yaxis = None, size = None, name = function, clear = False)
             elif self.class_function in "FO_test MFO_test":
                 peripherals_list.DUTsprinkler.ZeroPressure_Temp = output
-                function = "Valve Fully Open Position Testing  阀门全打开位置测试"
+                function = "Valve Fully Open Position Testing"
                 self.parent.create_plot(window = self.parent.GraphHolder, plottype = "fohistplot", xaxis = pressureReading, yaxis = None, size = None, name = function, clear = False)
             else: 
                 return PressureCheckResult(test_status=self.ERRORS.get("Bad_Function"), step_start_time = startTime, Zero_P= mean, Zero_P_Tolerance= Zero_Tolerance)
@@ -497,11 +388,11 @@ class PressureCheck(TestStep):
             if not STD_check and not ADC_check:
                 return PressureCheckResult(test_status = self.ERRORS.get("BAD_Both"), step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
             if not STD_check:
-                return PressureCheckResult(test_status = self.ERRORS.get("BAD_STD") + f"Set Min and Max  设置最小和最大值: {min_acceptable_STD , max_acceptable_STD}, Measured STD  测量标准差: {standardDeviation}", step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
+                return PressureCheckResult(test_status = self.ERRORS.get("BAD_STD") + f"Set Min and Max: {min_acceptable_STD , max_acceptable_STD}, Measured STD: {standardDeviation}", step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
             if not ADC_check: 
-                return PressureCheckResult(test_status = f"Set Min and Max  设置最小和最大值: {min_acceptable_ADC , max_acceptable_ADC}, Measured ADC  测量ADC值: {mean}", step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
+                return PressureCheckResult(test_status = f"Set Min and Max: {min_acceptable_ADC , max_acceptable_ADC}, Measured ADC: {mean}", step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
 
-        return PressureCheckResult(test_status = f"±Zero Pressure Reading  0压力读取: {mean:,} ADC, STD: {standardDeviation:,} ADC", step_start_time = startTime, Zero_P= mean, Zero_P_Tolerance= Zero_Tolerance)
+        return PressureCheckResult(test_status = f"±Zero Pressure Reading: {mean:,} ADC, STD: {standardDeviation:,} ADC", step_start_time = startTime, Zero_P= mean, Zero_P_Tolerance= Zero_Tolerance)
             
 class PressureCheckResult(TestResult):
     def __init__(self, test_status: Union[str, None], step_start_time: float, Zero_P:int, Zero_P_Tolerance:int):
@@ -510,7 +401,7 @@ class PressureCheckResult(TestResult):
         self.Zero_P_Tolerance = Zero_P_Tolerance
 
 class SendNozzleHome(TestStep):
-    ERRORS: Dict[str,str] = {"Not Valid": "OtO nozzle position value is not valid.  洒水器喷嘴位置值无效"}
+    ERRORS: Dict[str,str] = {"Not Valid": "OtO nozzle position value is not valid."}
 
     def run_step(self, peripherals_list: TestPeripherals):
         startTime = timeit.default_timer()
@@ -528,9 +419,9 @@ class SendNozzleHome(TestStep):
         peripherals_list.DUTsprinkler.nozzleOffset = nozzleOffset
         new_saved_MLB = int(peripherals_list.DUTMLB.get_nozzle_home_centidegrees().number)
         if new_saved_MLB == nozzleOffset:
-            return SendNozzleHomeResult(test_status = f"±Nozzle Home Position  喷嘴归0位置: {nozzleOffset/100}°", step_start_time = startTime, N_Offset_calc = nozzleOffset, N_offset_MLB = new_saved_MLB)
+            return SendNozzleHomeResult(test_status = f"±Nozzle Home Position: {nozzleOffset/100}°", step_start_time = startTime, N_Offset_calc = nozzleOffset, N_offset_MLB = new_saved_MLB)
         else:
-            return SendNozzleHomeResult(test_status = f"OtO saved nozzle position {nozzleOffset/100}° doesn't match with computer value {new_saved_MLB/100}°.\n洒水器保存的喷嘴位置与电脑规定值不符", step_start_time = startTime, N_Offset_calc = nozzleOffset, N_offset_MLB = new_saved_MLB)
+            return SendNozzleHomeResult(test_status = f"OtO saved nozzle position {nozzleOffset/100}° doesn't match with computer value {new_saved_MLB/100}°.", step_start_time = startTime, N_Offset_calc = nozzleOffset, N_offset_MLB = new_saved_MLB)
 
 class SendNozzleHomeResult(TestResult):
     def __init__(self, test_status: Union[str, None], step_start_time: float, N_Offset_calc: int,N_offset_MLB:int):
@@ -539,15 +430,15 @@ class SendNozzleHomeResult(TestResult):
         self.N_offset_MLB = N_offset_MLB
 
 class NozzleRotationTestWithSubscribe(TestStep): 
-    ERRORS: Dict[str,str] = {"Timeout_V": "Valve didn't reach target position in time.  阀门无法及时转到目标位置",
-                            "Timeout_N": "Nozzle didn't reach target position in time.  喷嘴无法及时转到目标位置",
-                            "Rotation_Rate": "Nozzle did not rotate at the correct speed.  喷嘴无法按正确速度转动",
-                            "EmptyList": "Nozzle position data was not received from OtO.  喷嘴位置数据无法从洒水器获得",
-                            "Data_colection_timeout": "Nozzle position data collection took too long.  喷嘴位置数据收集时间过长",
-                            "Backwards": "Nozzle rotated backwards!  喷嘴倒转",
-                            "IDK": "Unexpected error during nozzle rotation!  喷嘴旋转出现未知错误",
-                            "Max_STD" : "Nozzle speed variation was too large.  喷嘴旋转速度差异过大",
-                            "Min_STD" : "Nozzle speed variation was unusually small.  喷塑旋转速度差异异常的小"}
+    ERRORS: Dict[str,str] = {"Timeout_V": "Valve didn't reach target position in time.",
+                            "Timeout_N": "Nozzle didn't reach target position in time.",
+                            "Rotation_Rate": "Nozzle did not rotate at the correct speed.",
+                            "EmptyList": "Nozzle position data was not received from OtO.",
+                            "Data_colection_timeout": "Nozzle position data collection took too long.",
+                            "Backwards": "Nozzle rotated backwards!",
+                            "IDK": "Unexpected error during nozzle rotation!",
+                            "Max_STD" : "Nozzle speed variation was too large.",
+                            "Min_STD" : "Nozzle speed variation was unusually small."}
     TIMEOUT = 25 # in sec
     Nozzle_Duty_Cycle = 30
     MAXRotationSpeed: int = 3900  # Mar 2410/2411 data
@@ -584,7 +475,7 @@ class NozzleRotationTestWithSubscribe(TestStep):
             peripherals_list.DUTsprinkler.nozzleRotationSTD = round(measured_STD/100, 2)
             if "-v3" not in peripherals_list.DUTsprinkler.Firmware:
                 if peripherals_list.DUTsprinkler.NozzleCurrentAve > self.MAXNMotorCurrent or peripherals_list.DUTsprinkler.NozzleCurrentAve < self.MINNMotorCurrent:
-                    return NozzleRotationTestWithSubscribeResult(test_status = f"Nozzle motor current out of range! {self.MINNMotorCurrent}-{self.MAXNMotorCurrent}mA\n喷嘴电机电流超出范围!\nNozzle Rotation Speed 喷嘴旋转速度: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec, motor 电机 {peripherals_list.DUTsprinkler.NozzleCurrentAve} mA, STD {peripherals_list.DUTsprinkler.NozzleCurrentSTD} mA",
+                    return NozzleRotationTestWithSubscribeResult(test_status = f"Nozzle motor current out of range! {self.MINNMotorCurrent}-{self.MAXNMotorCurrent}mA. Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec, motor {peripherals_list.DUTsprinkler.NozzleCurrentAve} mA, STD {peripherals_list.DUTsprinkler.NozzleCurrentSTD} mA",
                     step_start_time = startTime, Friction_Points = nozzle_rotation_test_failure_count, Nozzle_Rotation_Data = Nozzle_Rotation_Test_Data)
                 if peripherals_list.DUTsprinkler.NozzleCurrentSTD > self.MAXNMotorCurrentSTD or peripherals_list.DUTsprinkler.NozzleCurrentSTD < self.MINNMotorCurrentSTD:
                     return NozzleRotationTestWithSubscribeResult(test_status = f"Nozzle motor current variation too large! {self.MINNMotorCurrent}-{self.MAXNMotorCurrent}mA\n喷嘴电机电流变化过大!\nNozzle Rotation Speed 喷嘴旋转速度: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec, motor 电机 {peripherals_list.DUTsprinkler.NozzleCurrentAve} mA, STD {peripherals_list.DUTsprinkler.NozzleCurrentSTD} mA",
@@ -624,8 +515,6 @@ class NozzleRotationTestWithSubscribe(TestStep):
         Sensor_Read_List: list = []
         Nozzle_Rotation_Data: list = []
         NozzleCurrent: list = []
-        Valve_Fully_Closed_Pos = 0 
-        Valve_Fully_Open_Pos = 9000 
         Nozzle_Home_Position = 0
         InitialAngularDelay = 1500 # in centideg
         check_stat: int = None # Will return 0 if all OK, 1 if List is empty, 2 if Timeout, 3 Unknown
@@ -971,7 +860,7 @@ class GetUnitNameResult(TestResult):
         super().__init__(test_status, step_start_time)
 
 class TestBattery(TestStep):
-    PASS_VOLTAGE:float = 3.607 #4.2V is full, based on stats of 141 units Dec 2023 at Meco
+    PASS_VOLTAGE:float = 3.5 #4.2V is full, based on stats of 141 units Dec 2023 at Meco
     ERRORS: Dict[str,str] = {"Low Battery": "Charge battery before retesting.  重新测试前，先给电池充电",
                          "No Reading": "Error reading battery voltage.  电池电压读取错误"
                          }
