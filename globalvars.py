@@ -1,0 +1,2 @@
+BOMtoFlash = ""
+KenakoreBOM = "Kenakore"
