@@ -11,8 +11,6 @@ import pandas as pd
 import pathlib
 from scipy import signal
 from scipy.signal import find_peaks
-import re
-from zebra import Zebra
 from otoSprinkler import otoSprinkler
 import pathlib
 import numpy as np
@@ -25,10 +23,8 @@ matplotlib.use('Agg')   # needed to prevent multi-thread failures when using mat
 from matplotlib import pyplot as plt
 
 class TestPeripherals:
-    '''
-    This class will sort the inputs into objects that have been predefined.
-    Only one com port is supported, and the program won't run if more than one USB card is connected.
-    '''
+    "This class will sort the inputs into objects that have been predefined. Only one com port is supported, and the program won't run if more than one USB card is connected."
+
     def __init__(self, *args, **kwargs):
         for entry in args:
             if isinstance(entry, otoSprinkler):
@@ -58,6 +54,39 @@ class TestPeripherals:
             import pyoto.otoProtocol.otoCommands as pyoto
             self.DUTMLB = pyoto.OtoInterface(pyoto.ConnectionType.UART, logger = None)
             self.DUTMLB.start_connection(port = None, reset_on_connect = True)
+            while self.DUTsprinkler.UID == "":
+                try:
+                    self.DUTsprinkler.UID = self.DUTMLB.get_account_id().string
+                except pyoto.NotInitializedException:
+                    self.DUTsprinkler.UID = None
+                except pyoto.TooLongException:
+                    self.DUTsprinkler.UID = ""
+                except Exception as e:
+                    raise TypeError("Error reading UID from OtO!\n" + str(repr(e)))
+            if self.DUTsprinkler.UID != None:  # wifi will mess us up, let's remove the UID from the OtO
+                try:
+                    self.DUTsprinkler.valveOffset = self.DUTMLB.get_valve_home_centidegrees().string
+                except pyoto.NotInitializedException:
+                    self.DUTsprinkler.valveOffset = None
+                except pyoto.TooLongException:
+                    self.DUTsprinkler.valveOffset = ""
+                except Exception as e:
+                    raise TypeError("Error reading valve offset from OtO!\n" + str(repr(e)))
+                try:
+                    self.DUTsprinkler.nozzleOffset = self.DUTMLB.get_nozzle_home_centidegrees().string
+                except pyoto.NotInitializedException:
+                    self.DUTsprinkler.nozzleOffset = None
+                except pyoto.TooLongException:
+                    self.DUTsprinkler.nozzleOffset = ""
+                except Exception as e:
+                    raise TypeError("Error reading nozzle offset from OtO!\n" + str(repr(e)))
+                self.DUTMLB.reset_flash_constants
+                self.DUTMLB.stop_connection()
+                self.DUTMLB.start_connection(port = None, reset_on_connect = True)
+                if self.DUTsprinkler.valveOffset != None:
+                    self.DUTMLB.set_valve_home_centidegrees(self.DUTsprinkler.valveOffset)
+                if self.DUTsprinkler.nozzleOffset != None:
+                    self.DUTMLB.set_nozzle_home_centidegrees(self.DUTsprinkler.valveOffset)
             self.DUTsprinkler.Firmware = self.DUTMLB.get_firmware_version().string
             if self.DUTsprinkler.Firmware < "v3":
                 self.DUTMLB.stop_connection()
@@ -131,8 +160,7 @@ class TestStep:
         return
 
 class TestSuite:
-    '''There are two ways to run a test suite. One is through the gui. This will automatically hand the devices to you.
-    The second way is to run it through the run_test_suite function. If running it through this method, the test devices must be created and handed ahead of time.'''
+    "There are two ways to run a test suite. One is through the gui. This will automatically hand the devices to you. The second way is to run it through the run_test_suite function. If running it through this method, the test devices must be created and handed ahead of time."
 
     def __init__(self, name: str, test_list: List[TestStep], test_devices: TestPeripherals, test_type: Literal ["EOL","Custom"]):
         self.name = name
@@ -148,6 +176,7 @@ class TestSuite:
         return test_result_list
 
 class CheckVacSwitch(TestStep):
+    "Checks is vacuum switches are on"
 
     def run_step(self,peripherals_list:TestPeripherals):
         "Check if any of the vacuum switches are currently tripped"
@@ -155,13 +184,13 @@ class CheckVacSwitch(TestStep):
         pumpErrors: str = None
         if peripherals_list.gpioSuite.vacSwitchPin1.get() == 1:
             peripherals_list.DUTsprinkler.vacuumFail += 1
-            pumpErrors = "Pump vacuum was not held on Bay 1 (black cap)"
+            pumpErrors = "±Pump vacuum was not held on Bay 1 (black cap)"
         if peripherals_list.gpioSuite.vacSwitchPin2.get() == 1:
             peripherals_list.DUTsprinkler.vacuumFail += 2
-            pumpErrors += "Pump vacuum was not held on Bay 2 (blue cap)"
+            pumpErrors += "±Pump vacuum was not held on Bay 2 (blue cap)"
         if peripherals_list.gpioSuite.vacSwitchPin3.get() == 1:
             peripherals_list.DUTsprinkler.vacuumFail += 4
-            pumpErrors += "Pump vacuum was not held on Bay 3 (orange cap)"
+            pumpErrors += "±Pump vacuum was not held on Bay 3 (orange cap)"
 
         return CheckVacSwitchResult(test_status = pumpErrors, step_start_time = startTime)
 
@@ -215,219 +244,126 @@ class EstablishLoggingLocationResult(TestResult):
         super().__init__(test_status, step_start_time)
         self.file_path = file_path
 
-class PressureCheck(TestStep):
-    "Reads pressure sensor for the number of seconds specified, used for Zero, Closed Valve and Fully Open tests"
-    ERRORS:dict = {
-                    "Timeout_V": "OtO valve failed to close in time.",
-                    "Empty List": "No pressure information was received from OtO.",
-                    "Bad_Function" : "UNEXPECTED PROGRAM ERROR!",
-                    "High STD": "Pressure data is not consistent enough.",
-                    "Low STD": "Pressure data is unusually consistent.",
-                    "BAD_STD": "Pressure data is not within expected consistency limits.",
-                    "BAD_Both": "Pressure data values and consistency are not within limits.",
-                    "Pressure_Sensor": "OtO pressure sensor is not recognized."}
-
-    def __init__(self, name: str, data_collection_time: int , class_function:str , valve_target: int, parent: tk):
-        super().__init__(name, parent)
-        self.data_collection_time = data_collection_time
-        self.class_function = class_function
-        self.valve_target = valve_target
+class GetUnitName(TestStep):
+    ERRORS: dict = {"Cloud Failed": "OtO unit name function failed.",
+                    "Blank BOM": "OtO computer doesn't have a BOM, can't be tested.",
+                    "Can't Write": "Error writing BOM to OtO.",
+                    "No Device ID": "OtO doesn't have a unit name, won't check Firebase"}
 
     def run_step(self, peripherals_list: TestPeripherals):
         startTime = timeit.default_timer()
-        pressure_sensor_check = int(peripherals_list.DUTMLB.get_pressure_sensor_version().pressure_sensor_version)
-
-        if self.class_function in "EOL":  # new fully open test at closed positions uses same limits as zero pressure
-            if pressure_sensor_check == peripherals_list.DUTsprinkler.psig15:
-                max_acceptable_STD: float = 387.8  # Jan 2023 ±4σ
-                min_acceptable_STD: float = 96.5  # Jan 2023 ±4σ
-                max_acceptable_ADC: float = 1786755  # Jan 2023 ±4σ
-                min_acceptable_ADC: float = 1611555  # Jan 2023 ±4σ
-            elif pressure_sensor_check == peripherals_list.DUTsprinkler.psig30:
-                max_acceptable_STD: float = 230  # Jan 2024 from histogram 230
-                min_acceptable_STD: float = 66.5  # Jan 2023/4 66.5
-                max_acceptable_ADC: float = 1875000  # Jan 2024 from histogram 1875000
-                min_acceptable_ADC: float = 1520000  # Jan 2024 from histogram 1520000
-            else:
-                return PressureCheckResult(test_status=self.ERRORS.get("Pressure_Sensor"), step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
-        elif self.class_function in "MFO_test":  # new fully open test at closed positions uses adjusted limits
-            if pressure_sensor_check == peripherals_list.DUTsprinkler.psig15:
-                max_acceptable_STD: float = 780  # 2x limit from zero pressure
-                min_acceptable_STD: float = 96.5  # Jan 2023 ±4σ
-                max_acceptable_ADC: float = 2100000  # same as 30 psig value
-                min_acceptable_ADC: float = 1611555  # Jan 2023 ±4σ
-            elif pressure_sensor_check == peripherals_list.DUTsprinkler.psig30:
-                max_acceptable_STD: float = 460  # 2x limit from zero pressure
-                min_acceptable_STD: float = 66.5  # Jan 2023/4 66.5
-                max_acceptable_ADC: float = 2100000  # from 2411 data
-                min_acceptable_ADC: float = 1520000  # Jan 2024 from histogram 1520000
-            else:
-                return PressureCheckResult(test_status=self.ERRORS.get("Pressure_Sensor"), step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
-        elif self.class_function == "FO_test":
-            if pressure_sensor_check == peripherals_list.DUTsprinkler.psig15:
-                max_acceptable_STD: float = 32000  # confirmed Jan 2023
-                min_acceptable_STD: float = 3000  # confirmed Jan 2023
-                max_acceptable_ADC: float = 5861045  # updated Jan 2023
-                min_acceptable_ADC: float = 4167230  # updated Jan 2023
-            elif pressure_sensor_check == peripherals_list.DUTsprinkler.psig30:
-                max_acceptable_STD: float = 12000  # updated Apr 2023
-                min_acceptable_STD: float = 2000  # updated Apr 2023
-                max_acceptable_ADC: float = 3790000  # updated Apr 2023
-                min_acceptable_ADC: float = 2680000  # updated Apr 2023
-            else:
-                return PressureCheckResult(test_status=self.ERRORS.get("Pressure_Sensor"), step_start_time=startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
-        else:
-            return PressureCheckResult(test_status=self.ERRORS.get("Bad_Function"), step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
-
-        standardDeviation:float = 32000  # should be equal or bigger than min_acceptable_STD defined above
-        number_of_trials:int = 2
-        trial_count:int = 1
-        multiple_STD:int = 5
-        Sensor_Read_List:list = []
-        pressureReading:list = []
-        pressureReadingData:list = []
-        dataCount:int =0
-        mean:int = 0
-        maxDeviation:int = 0
-        maxDeviation_x:int = 0
-        Zero_Tolerance:int = 0
-        setting_n_output: list = []
-        Destination_Folder_1 = None
-        loop_check:bool = True
-        STD_check = True
-        ADC_check = True
-
-        peripherals_list.DUTMLB.use_moving_average_filter(True)
-        while loop_check == True and trial_count <= number_of_trials:
-            Sensor_Read_List:list = []
-            output:list = []
-            pressureReading:list = []
-            pressureReadingData:list = []
-            dataCount:int = 0
-            mean:int = 0
-            maxDeviation:int = 0
-            maxDeviation_x:int = 0
-            Zero_Tolerance:int = 0
-            setting_n_output: list = []
-            standardDeviation = 0
-
-            peripherals_list.DUTMLB.set_sensor_subscribe(subscribe_frequency = peripherals_list.DUTsprinkler.SubscribeFrequency) 
-            time.sleep(0.1)
-            peripherals_list.DUTMLB.clear_incoming_packet_log()
-            main_loop_start_time = time.perf_counter()
-            while time.perf_counter() - main_loop_start_time <= self.data_collection_time:
-                Sensor_Read_List.extend(peripherals_list.DUTMLB.read_all_sensor_packets(limit = None, consume = True))
-            peripherals_list.DUTMLB.set_sensor_subscribe(subscribe_frequency = peripherals_list.DUTsprinkler.SubscribeOff)
-            peripherals_list.DUTMLB.clear_incoming_packet_log()
-
-            if not Sensor_Read_List:
-                PressureCheckResult(test_status = self.ERRORS.get("Empty List"), step_start_time = startTime, Zero_P = None, Zero_P_Tolerance = None)
-
-            for message in Sensor_Read_List:
-                pressureReadingData.append([int(message.time_ms), int(message.pressure_adc)])
-                pressureReading.append(int(message.pressure_adc))
-                dataCount += 1
-
-            mean = round(float(np.mean(pressureReading)), 0)
-            standardDeviation = round(float(np.std(pressureReading)), 1)
-            Zero_Tolerance = multiple_STD * standardDeviation
-            for pressure in pressureReading:
-                maxDeviation_x = maxDeviation
-                maxDeviation = abs(mean-pressure)
-                if maxDeviation <= maxDeviation_x: 
-                    maxDeviation = maxDeviation_x
-
-            output.append(mean)
-            output.append(Zero_Tolerance)
-            output.append(multiple_STD)
-            
-            if self.class_function == "EOL":
-                peripherals_list.DUTsprinkler.ZeroPressure = output
-                peripherals_list.DUTsprinkler.ZeroPressureAve = mean
-                peripherals_list.DUTsprinkler.ZeroPressureSTD = standardDeviation
-                function = "Calibrating Zero Pressure"
-                self.parent.create_plot(window = self.parent.GraphHolder, plottype = "histplot", xaxis = pressureReading, yaxis = None, size = None, name = function, clear = False)
-            elif self.class_function in "FO_test MFO_test":
-                peripherals_list.DUTsprinkler.ZeroPressure_Temp = output
-                function = "Valve Fully Open Position Testing"
-                self.parent.create_plot(window = self.parent.GraphHolder, plottype = "fohistplot", xaxis = pressureReading, yaxis = None, size = None, name = function, clear = False)
-            else: 
-                return PressureCheckResult(test_status=self.ERRORS.get("Bad_Function"), step_start_time = startTime, Zero_P= mean, Zero_P_Tolerance= Zero_Tolerance)
-          
-            UnitName = peripherals_list.DUTsprinkler.deviceID
-            bom_Number = peripherals_list.DUTsprinkler.bomNumber
-            setting_n_output = ([f"Unit ID: {UnitName}", f"Mean: {mean}", f"STD: {standardDeviation}", f"Max Deviation to Mean: {maxDeviation}", f"Data Points: {dataCount}",
-                                 f"{multiple_STD}x STD: {multiple_STD*standardDeviation}",f"Output List: {output} ", f"BOM Number: {bom_Number}" , f"Valve Target: {self.valve_target}" ,
-                                 "Limits:",f" min and max ADC: [{min_acceptable_ADC} , {max_acceptable_ADC}]",f" min and max Std. Dev.: [{min_acceptable_STD} , {max_acceptable_STD}]"])
-
-            setting_n_output = pd.DataFrame(setting_n_output)
-            Data = pd.DataFrame(pressureReadingData)
-            Data = Data.merge(setting_n_output, suffixes = ["_left", "_right"], left_index = True, right_index = True, how = "outer")
-            Data.columns = ["Timestamp" , "Pressure Reading" , "More info"]
-            Date_Time = str(datetime.now().strftime("%d-%m-%Y %H-%M-%S"))
-
-            if self.class_function == "EOL":
-                Destination_Folder_1 = "Zero P"
-            elif self.class_function in "FO_test MFO_test":
-                Destination_Folder_1 = "Fully Open"
-
-            if UnitName != "":
-                file_name = EstablishLoggingLocation(name = "CollectRawDataWithSubscribe", folder_name = Destination_Folder_1, date_time = Date_Time, parent = self.parent).run_step(peripherals_list = peripherals_list).file_path
-                Data.to_csv(file_name, encoding = "utf-8")
-
-            trial_count += 1
-            if (standardDeviation <= max_acceptable_STD and standardDeviation >= min_acceptable_STD) and (mean <= max_acceptable_ADC and mean >= min_acceptable_ADC):
-                loop_check = False
-
-        if standardDeviation > max_acceptable_STD or standardDeviation < min_acceptable_STD:
-            STD_check = False
-        if mean > max_acceptable_ADC or mean < min_acceptable_ADC:
-            ADC_check = False
-
-        if not STD_check or not ADC_check:
-            if not STD_check and not ADC_check:
-                return PressureCheckResult(test_status = self.ERRORS.get("BAD_Both"), step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
-            if not STD_check:
-                return PressureCheckResult(test_status = self.ERRORS.get("BAD_STD") + f"Set Min and Max: {min_acceptable_STD , max_acceptable_STD}, Measured STD: {standardDeviation}", step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
-            if not ADC_check: 
-                return PressureCheckResult(test_status = f"Set Min and Max: {min_acceptable_ADC , max_acceptable_ADC}, Measured ADC: {mean}", step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
-
-        return PressureCheckResult(test_status = f"±Zero Pressure Reading: {mean:,} ADC, STD: {standardDeviation:,} ADC", step_start_time = startTime, Zero_P= mean, Zero_P_Tolerance= Zero_Tolerance)
-            
-class PressureCheckResult(TestResult):
-    def __init__(self, test_status: Union[str, None], step_start_time: float, Zero_P:int, Zero_P_Tolerance:int):
-        super().__init__(test_status, step_start_time)
-        self.Zero_P = Zero_P
-        self.Zero_P_Tolerance = Zero_P_Tolerance
-
-class SendNozzleHome(TestStep):
-    ERRORS: Dict[str,str] = {"Not Valid": "OtO nozzle position value is not valid."}
-
-    def run_step(self, peripherals_list: TestPeripherals):
-        startTime = timeit.default_timer()
+        Firmware = peripherals_list.DUTsprinkler.Firmware
+        self.parent.labelFirmware.configure(text = Firmware)
+        self.parent.labelFirmware.update()
+        # If there isn't a BOM stop and error out
         try:
-            saved_MLB = int(peripherals_list.DUTMLB.get_nozzle_home_centidegrees().number)
+            peripherals_list.DUTsprinkler.bomNumber = peripherals_list.DUTMLB.get_device_hardware_version().string
         except peripherals_list.DUTsprinkler.NoNVSException:
-            saved_MLB = 0
+            return GetUnitNameResult(test_status = self.ERRORS.get("Blank BOM"), step_start_time = startTime)
         except Exception as e:
-            return SendNozzleHomeResult(test_status = str(e), step_start_time = startTime, N_Offset_calc = nozzleOffset, N_offset_MLB = new_saved_MLB)
-        Nozzle_sensor_read = int(peripherals_list.DUTMLB.get_sensors().nozzle_position_centideg)
-        if Nozzle_sensor_read > 36000 or Nozzle_sensor_read < 0:
-            return SendNozzleHomeResult(test_status = self.ERRORS.get("NotValid") + f" at {Nozzle_sensor_read/100}°", step_start_time = startTime, N_Offset_calc = nozzleOffset, N_offset_MLB = new_saved_MLB)
-        nozzleOffset = (saved_MLB + Nozzle_sensor_read) % 36000
-        peripherals_list.DUTMLB.set_nozzle_home_centidegrees(nozzleOffset)
-        peripherals_list.DUTsprinkler.nozzleOffset = nozzleOffset
-        new_saved_MLB = int(peripherals_list.DUTMLB.get_nozzle_home_centidegrees().number)
-        if new_saved_MLB == nozzleOffset:
-            return SendNozzleHomeResult(test_status = f"±Nozzle Home Position: {nozzleOffset/100}°", step_start_time = startTime, N_Offset_calc = nozzleOffset, N_offset_MLB = new_saved_MLB)
+            return GetUnitNameResult(test_status = str(e), step_start_time = startTime)
+        # Update the BOM displayed on the screen
+        existingBOM = peripherals_list.DUTsprinkler.bomNumber
+        self.parent.text_bom_number.delete(1.0,tk.END)
+        self.parent.text_bom_number.insert(tk.END, existingBOM)
+        self.parent.text_bom_number.update()
+        # check for an existing unit name on the board. If there isn't one just use the MAC address.
+        try:
+            existingSerial = peripherals_list.DUTMLB.get_device_id().string
+            if len(existingSerial) == 0:
+                existingSerial = None
+        except peripherals_list.DUTsprinkler.NoNVSException:
+            return GetUnitNameResult(test_status = f"±{self.ERRORS.get('No Device ID')}", step_start_time = startTime)
+        except Exception as e:
+            return GetUnitNameResult(test_status = str(e), step_start_time = startTime)
+        ReturnMessage = self.otoGenerateSerialRequest(peripherals_list = peripherals_list, existingSerial = existingSerial)
+        if ReturnMessage != None:
+            return GetUnitNameResult(test_status = ReturnMessage, step_start_time = startTime)
+        existingSerial = peripherals_list.DUTsprinkler.deviceID
+        self.parent.text_device_id.delete(1.0, tk.END)
+        self.parent.text_device_id.insert(tk.END, existingSerial)
+        self.parent.text_device_id.update()
+        if len(existingSerial) != 0: #blank units will have "" as the default value
+            if existingSerial[0:3] == "oto" and len(existingSerial) == 10 and existingSerial[3:10].isnumeric():  # is the Device ID valid?
+                EstablishLoggingLocation(name = None, folder_name = None, csv_file_name = None, parent = self.parent).run_step(peripherals_list = peripherals_list)
+                self.parent.text_console_logger(f"{existingSerial}, {existingBOM}, {peripherals_list.DUTsprinkler.macAddress}, UID => {peripherals_list.DUTsprinkler.UID}")
+                return GetUnitNameResult(test_status = None, step_start_time = startTime)
+            else: # Invalid unit name
+                return GetUnitNameResult(test_status = f"Invalid unit name: {existingSerial}", step_start_time = startTime)                
         else:
-            return SendNozzleHomeResult(test_status = f"OtO saved nozzle position {nozzleOffset/100}° doesn't match with computer value {new_saved_MLB/100}°.", step_start_time = startTime, N_Offset_calc = nozzleOffset, N_offset_MLB = new_saved_MLB)
-
-class SendNozzleHomeResult(TestResult):
-    def __init__(self, test_status: Union[str, None], step_start_time: float, N_Offset_calc: int,N_offset_MLB:int):
+            return GetUnitNameResult(test_status = self.ERRORS.get("No Device ID"), step_start_time = startTime)
+        
+    def otoGenerateSerialRequest(self, peripherals_list: TestPeripherals, existingSerial: str = None):
+        "Send HTTP request to oto-generate-unit function, optionally using given unit name. Args: existingSerial (optional): given unit name if required. Returns: None if OK, otherwise error as String"
+        if "OTO" in peripherals_list.DUTsprinkler.factoryLocation.upper():
+            factory_location = "OTO_MFG"
+        else:
+            factory_location = "MECO_MFG"
+        oto_generate_unit_url = "https://us-central1-oto-test-3254b.cloudfunctions.net/masterGenerateUnit"
+        # oto_generate_unit_url = 'https://meco-accessor-service-ugegz6xfpa-pd.a.run.app/oto/meco/masterGenerateUnit'
+        requestJson = {
+            "key": "XJhbCu4ujfJF3Ugu",
+            "bomNumber": peripherals_list.DUTsprinkler.bomNumber,
+            "batchNumber": peripherals_list.DUTsprinkler.batchNumber,
+            "macAddress": peripherals_list.DUTsprinkler.macAddress,
+            "flashFactoryLocation": factory_location
+        }
+        if existingSerial is not None:
+            requestJson["unitSerial"] = existingSerial
+        try:
+            self.parent.text_console_logger("Cloud communication...")            
+            response = requests.post(oto_generate_unit_url, json = requestJson, timeout = 10, allow_redirects = False)
+        except requests.exceptions.ConnectTimeout as error:
+            return f"Time out connecting to Firebase website {oto_generate_unit_url}"
+        except requests.exceptions.ConnectionError as error:
+            return f"Connection error to Firebase website {oto_generate_unit_url}"
+        except Exception as error:
+            return f"Unknown HTTP Request Exception:\n{repr(error)}"
+        # Parse response body as a JSON
+        try:
+            responseJson = response.json()
+        except json.JSONDecodeError:
+            return response.content.decode()
+        except Exception:
+            return "Unknown exception during JSON response parse"
+        # Check response, return error message if not
+        if response.status_code == 200:
+            # Retrieve the response
+            try:
+                newserial = str(responseJson["unitSerial"])
+                peripherals_list.DUTsprinkler.deviceID = newserial
+                if existingSerial is None:
+                    self.parent.text_console_logger(f"Are you sure this is a return? Generated a new unit name!!!: {peripherals_list.DUTsprinkler.deviceID}, writing to OtO...")
+            except Exception as error:
+                return f"Unable to read JSON field in POST response:\n{repr(error)}"
+        else:
+            ErrorMessage = json.loads(response.content.decode())["error"]
+            if "Firebase found one unit with this MAC address but it does not match the device ID provided. Firebase: oto" in ErrorMessage:
+                newserial = ErrorMessage[102:112]
+                if newserial[0:3] != "oto" or not newserial[3:10].isnumeric() or len(newserial) != 10 or existingSerial != None:
+                    return ErrorMessage
+                else:
+                    self.parent.text_console_logger(f"Updated unit name to match Firebase! {peripherals_list.DUTsprinkler.deviceID}, writing to OtO...")
+            else:
+                return ErrorMessage
+        if existingSerial is None:
+            try:
+                peripherals_list.DUTMLB.set_device_id(newserial)
+            except Exception as f:
+                return f"Unable to write unit name to OtO: {newserial}\n{repr(f)}"
+            try:
+                peripherals_list.DUTsprinkler.deviceID = peripherals_list.DUTMLB.get_device_id().string
+            except Exception as f:
+                return f"Didn't write unit name to OtO! {newserial}"
+            if peripherals_list.DUTsprinkler.deviceID != newserial:
+                return f"Unit names don't match! OtO: {peripherals_list.DUTsprinkler.deviceID}, Cloud: {newserial}"
+        else:
+            self.parent.text_console_logger(f"Matched unit name with Firebase: {newserial}")            
+        return None
+    
+class GetUnitNameResult(TestResult):
+    def __init__(self, test_status, step_start_time):
         super().__init__(test_status, step_start_time)
-        self.N_Offset_calc = N_Offset_calc
-        self.N_offset_MLB = N_offset_MLB
 
 class NozzleRotationTestWithSubscribe(TestStep): 
     ERRORS: Dict[str,str] = {"Timeout_V": "Valve didn't reach target position in time.",
@@ -475,40 +411,40 @@ class NozzleRotationTestWithSubscribe(TestStep):
             peripherals_list.DUTsprinkler.nozzleRotationSTD = round(measured_STD/100, 2)
             if "-v3" not in peripherals_list.DUTsprinkler.Firmware:
                 if peripherals_list.DUTsprinkler.NozzleCurrentAve > self.MAXNMotorCurrent or peripherals_list.DUTsprinkler.NozzleCurrentAve < self.MINNMotorCurrent:
-                    return NozzleRotationTestWithSubscribeResult(test_status = f"Nozzle motor current out of range! {self.MINNMotorCurrent}-{self.MAXNMotorCurrent}mA. Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec, motor {peripherals_list.DUTsprinkler.NozzleCurrentAve} mA, STD {peripherals_list.DUTsprinkler.NozzleCurrentSTD} mA",
+                    return NozzleRotationTestWithSubscribeResult(test_status = f"±Nozzle motor current out of range! {self.MINNMotorCurrent}-{self.MAXNMotorCurrent}mA. Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec, motor {peripherals_list.DUTsprinkler.NozzleCurrentAve} mA, STD {peripherals_list.DUTsprinkler.NozzleCurrentSTD} mA",
                     step_start_time = startTime, Friction_Points = nozzle_rotation_test_failure_count, Nozzle_Rotation_Data = Nozzle_Rotation_Test_Data)
                 if peripherals_list.DUTsprinkler.NozzleCurrentSTD > self.MAXNMotorCurrentSTD or peripherals_list.DUTsprinkler.NozzleCurrentSTD < self.MINNMotorCurrentSTD:
-                    return NozzleRotationTestWithSubscribeResult(test_status = f"Nozzle motor current variation too large! {self.MINNMotorCurrent}-{self.MAXNMotorCurrent}mA\n喷嘴电机电流变化过大!\nNozzle Rotation Speed 喷嘴旋转速度: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec, motor 电机 {peripherals_list.DUTsprinkler.NozzleCurrentAve} mA, STD {peripherals_list.DUTsprinkler.NozzleCurrentSTD} mA",
+                    return NozzleRotationTestWithSubscribeResult(test_status = f"±Nozzle motor current variation too large! {self.MINNMotorCurrent}-{self.MAXNMotorCurrent}mA\nNozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec, motor {peripherals_list.DUTsprinkler.NozzleCurrentAve} mA, STD {peripherals_list.DUTsprinkler.NozzleCurrentSTD} mA",
                 step_start_time = startTime, Friction_Points = nozzle_rotation_test_failure_count, Nozzle_Rotation_Data = Nozzle_Rotation_Test_Data)
             if self.MINRotationSpeed <= measured_average_speed <= self.MAXRotationSpeed and nozzle_rotation_test_Max_STD_failure == False and nozzle_rotation_test_Min_STD_failure == False:
-                return NozzleRotationTestWithSubscribeResult(test_status = f"±Nozzle Rotation Speed 喷嘴旋转速度: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec, motor 电机 {peripherals_list.DUTsprinkler.NozzleCurrentAve} mA, STD {peripherals_list.DUTsprinkler.NozzleCurrentSTD} mA",
+                return NozzleRotationTestWithSubscribeResult(test_status = f"±Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec, motor {peripherals_list.DUTsprinkler.NozzleCurrentAve} mA, STD {peripherals_list.DUTsprinkler.NozzleCurrentSTD} mA",
                 step_start_time = startTime, Friction_Points = nozzle_rotation_test_failure_count, Nozzle_Rotation_Data = Nozzle_Rotation_Test_Data)
             elif (measured_average_speed < self.MINRotationSpeed or measured_average_speed > self.MAXRotationSpeed) and nozzle_rotation_test_Max_STD_failure == True:
-                return NozzleRotationTestWithSubscribeResult(test_status= f"Nozzle Rotation Speed 喷嘴旋转速度: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("Max_STD") + " and...\n " + self.ERRORS.get("Rotation_Rate"), step_start_time = startTime,
+                return NozzleRotationTestWithSubscribeResult(test_status= f"±Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("Max_STD") + " and...\n " + self.ERRORS.get("Rotation_Rate"), step_start_time = startTime,
                 Friction_Points = nozzle_rotation_test_failure_count, Nozzle_Rotation_Data = Nozzle_Rotation_Test_Data) 
             elif (measured_average_speed < self.MINRotationSpeed or measured_average_speed > self.MAXRotationSpeed) and nozzle_rotation_test_Min_STD_failure == True:
-                return NozzleRotationTestWithSubscribeResult(test_status= f"Nozzle Rotation Speed 喷嘴旋转速度: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("Min_STD") + " and...\n " + self.ERRORS.get("Rotation_Rate"), step_start_time = startTime,
+                return NozzleRotationTestWithSubscribeResult(test_status= f"±Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("Min_STD") + " and...\n " + self.ERRORS.get("Rotation_Rate"), step_start_time = startTime,
                 Friction_Points = nozzle_rotation_test_failure_count, Nozzle_Rotation_Data = Nozzle_Rotation_Test_Data) 
             elif measured_average_speed < self.MINRotationSpeed or measured_average_speed > self.MAXRotationSpeed:
-                return NozzleRotationTestWithSubscribeResult(test_status = f"Nozzle Rotation Speed 喷嘴旋转速度: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("Rotation_Rate"), step_start_time = startTime,
+                return NozzleRotationTestWithSubscribeResult(test_status = f"±Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("Rotation_Rate"), step_start_time = startTime,
                 Friction_Points = nozzle_rotation_test_failure_count, Nozzle_Rotation_Data = Nozzle_Rotation_Test_Data)   
             elif nozzle_rotation_test_Max_STD_failure == True:
-                return NozzleRotationTestWithSubscribeResult(test_status = f"Nozzle Rotation Speed 喷嘴旋转速度: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("Max_STD"), step_start_time = startTime,
+                return NozzleRotationTestWithSubscribeResult(test_status = f"±Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("Max_STD"), step_start_time = startTime,
                 Friction_Points = nozzle_rotation_test_failure_count, Nozzle_Rotation_Data = Nozzle_Rotation_Test_Data)  
             elif nozzle_rotation_test_Min_STD_failure == True:
-                return NozzleRotationTestWithSubscribeResult(test_status = f"Nozzle Rotation Speed 喷嘴旋转速度: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("Min_STD"), step_start_time = startTime,
+                return NozzleRotationTestWithSubscribeResult(test_status = f"±Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("Min_STD"), step_start_time = startTime,
                 Friction_Points = nozzle_rotation_test_failure_count, Nozzle_Rotation_Data = Nozzle_Rotation_Test_Data)  
             else:
-                return NozzleRotationTestWithSubscribeResult(test_status = f"Nozzle Rotation Speed 喷嘴旋转速度: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("IDK"), step_start_time = startTime,
+                return NozzleRotationTestWithSubscribeResult(test_status = f"±Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("IDK"), step_start_time = startTime,
                 Friction_Points = nozzle_rotation_test_failure_count, Nozzle_Rotation_Data = Nozzle_Rotation_Test_Data) 
         elif data_collection_status == 1:
-            return NozzleRotationTestWithSubscribeResult(test_status=self.ERRORS.get("EmptyList"), step_start_time = startTime, Friction_Points = nozzle_rotation_test_failure_count, Nozzle_Rotation_Data = Nozzle_Rotation_Test_Data)
+            return NozzleRotationTestWithSubscribeResult(test_status = f"±{self.ERRORS.get('EmptyList')}", step_start_time = startTime, Friction_Points = nozzle_rotation_test_failure_count, Nozzle_Rotation_Data = Nozzle_Rotation_Test_Data)
         elif data_collection_status == 2:
-            return NozzleRotationTestWithSubscribeResult(test_status=self.ERRORS.get("Data_colection_timeout") + f" Failed at {Timeout_Location} ", step_start_time = startTime, Friction_Points = nozzle_rotation_test_failure_count, Nozzle_Rotation_Data = Nozzle_Rotation_Test_Data)
+            return NozzleRotationTestWithSubscribeResult(test_status = f"±{self.ERRORS.get('Data_colection_timeout')} Failed at {Timeout_Location}", step_start_time = startTime, Friction_Points = nozzle_rotation_test_failure_count, Nozzle_Rotation_Data = Nozzle_Rotation_Test_Data)
         elif data_collection_status == 5:
-            return NozzleRotationTestWithSubscribeResult(test_status=self.ERRORS.get("Backwards"), step_start_time = startTime, Friction_Points = nozzle_rotation_test_failure_count, Nozzle_Rotation_Data = Nozzle_Rotation_Test_Data)
+            return NozzleRotationTestWithSubscribeResult(test_status = f"±{self.ERRORS.get('Backwards')}", step_start_time = startTime, Friction_Points = nozzle_rotation_test_failure_count, Nozzle_Rotation_Data = Nozzle_Rotation_Test_Data)
         else:
-            return NozzleRotationTestWithSubscribeResult(test_status=self.ERRORS.get("IDK"), step_start_time = startTime, Friction_Points=nozzle_rotation_test_failure_count, Nozzle_Rotation_Data = Nozzle_Rotation_Test_Data)
+            return NozzleRotationTestWithSubscribeResult(test_status = f"±{self.ERRORS.get('IDK')}", step_start_time = startTime, Friction_Points=nozzle_rotation_test_failure_count, Nozzle_Rotation_Data = Nozzle_Rotation_Test_Data)
         
     def Collecting_Nozzle_Rotation_Data(self, peripherals_list: TestPeripherals):
         startTime = timeit.default_timer()
@@ -520,7 +456,7 @@ class NozzleRotationTestWithSubscribe(TestStep):
         check_stat: int = None # Will return 0 if all OK, 1 if List is empty, 2 if Timeout, 3 Unknown
      
         try:  # Sending Nozzle Home
-            ReturnMessage = peripherals_list.DUTMLB.set_nozzle_position(Nozzle_Home_Position, wait_for_complete = True)
+            ReturnMessage = peripherals_list.DUTMLB.set_nozzle_position_home(wait_for_complete = True)
         except TimeoutError:
             return {"Status_Check": 2 , "TimeoutWhere": 1 , "Collected_Data_List": Nozzle_Rotation_Data}
         except Exception as e:
@@ -595,7 +531,7 @@ class NozzleRotationTestWithSubscribe(TestStep):
 
         # End of Data Gathering; Sending Nozzle Back Home
         try:  
-            ReturnMessage = peripherals_list.DUTMLB.set_nozzle_position(Nozzle_Home_Position, wait_for_complete = True)
+            ReturnMessage = peripherals_list.DUTMLB.set_nozzle_position_home(wait_for_complete = True)
         except TimeoutError as e:
             return {"Status_Check": 2,"TimeoutWhere": 3 , "Collected_Data_List": Nozzle_Rotation_Data}
         except Exception as e:
@@ -740,140 +676,243 @@ class NozzleRotationTestWithSubscribeResult(TestResult):
         self.Friction_Points = Friction_Points
         self.Nozzle_Rotation_Data = Nozzle_Rotation_Data
 
-class GetUnitName(TestStep):
-    ERRORS: dict = {"Cloud Failed": "OtO unit name function failed.",
-                    "Blank BOM": "OtO computer doesn't have a BOM, can't be tested.",
-                    "Can't Write": "Error writing BOM to OtO.",
-                    "No Device ID": "OtO doesn't have a unit name, won't check Firebase"}
+class PressureCheck(TestStep):
+    "Reads pressure sensor for the number of seconds specified, used for Zero, Closed Valve and Fully Open tests"
+    ERRORS:dict = {
+                    "Timeout_V": "OtO valve failed to close in time.",
+                    "Empty List": "No pressure information was received from OtO.",
+                    "Bad_Function" : "UNEXPECTED PROGRAM ERROR!",
+                    "High STD": "Pressure data is not consistent enough.",
+                    "Low STD": "Pressure data is unusually consistent.",
+                    "BAD_STD": "Pressure data is not within expected consistency limits.",
+                    "BAD_Both": "Pressure data values and consistency are not within limits.",
+                    "Pressure_Sensor": "OtO pressure sensor is not recognized."}
+
+    def __init__(self, name: str, data_collection_time: int , class_function:str , valve_target: int, parent: tk):
+        super().__init__(name, parent)
+        self.data_collection_time = data_collection_time
+        self.class_function = class_function
+        self.valve_target = valve_target
 
     def run_step(self, peripherals_list: TestPeripherals):
         startTime = timeit.default_timer()
-        Firmware = peripherals_list.DUTsprinkler.Firmware
-        self.parent.labelFirmware.configure(text = Firmware)
-        self.parent.labelFirmware.update()
-        # If there isn't a BOM stop and error out
-        try:
-            peripherals_list.DUTsprinkler.bomNumber = peripherals_list.DUTMLB.get_device_hardware_version().string
-        except Exception as e:
-            return GetUnitNameResult(test_status = self.ERRORS.get("Blank BOM") + str(e), step_start_time = startTime)
-        # Update the BOM displayed on the screen
-        existingBOM = peripherals_list.DUTsprinkler.bomNumber
-        self.parent.text_bom_number.delete(1.0,tk.END)
-        self.parent.text_bom_number.insert(tk.END, existingBOM)
-        self.parent.text_bom_number.update()
-        # check for an existing unit name on the board. If there isn't one just use the MAC address.
-        try:
-            existingSerial = peripherals_list.DUTMLB.get_device_id().string
-            if len(existingSerial) == 0:
-                existingSerial = None
-        except Exception as e:
-            return GetUnitNameResult(test_status = self.ERRORS.get("No Device ID") + str(e), step_start_time = startTime)
-        
-        if existingSerial != None:
-            ReturnMessage = self.otoGenerateSerialRequest(peripherals_list = peripherals_list, existingSerial = existingSerial)
-            if ReturnMessage != None:
-                return GetUnitNameResult(test_status = ReturnMessage, step_start_time = startTime)
-        existingSerial = peripherals_list.DUTsprinkler.deviceID
-        self.parent.text_device_id.delete(1.0, tk.END)
-        self.parent.text_device_id.insert(tk.END, existingSerial)
-        self.parent.text_device_id.update()
-        if len(existingSerial) != 0: #blank units will have "" as the default value
-            if existingSerial[0:3] == "oto" and len(existingSerial) == 10 and existingSerial[3:10].isnumeric():  # is the Device ID valid?
-                EstablishLoggingLocation(name = None, folder_name = None, csv_file_name = None, parent = self.parent).run_step(peripherals_list = peripherals_list)
-                self.parent.text_console_logger(f"{existingSerial}, {existingBOM}, {peripherals_list.DUTsprinkler.macAddress}")
-                return GetUnitNameResult(test_status = None, step_start_time = startTime)
-            else: # Invalid unit name
-                return GetUnitNameResult(test_status = f"Invalid unit name 洒水器产品号无效: {existingSerial}", step_start_time = startTime)                
-        else:
-            return GetUnitNameResult(test_status = self.ERRORS.get("No Device ID"), step_start_time = startTime)
-        
-    def otoGenerateSerialRequest(self, peripherals_list: TestPeripherals, existingSerial: str = None):
-        "Send HTTP request to oto-generate-unit function, optionally using given unit name. Args: existingSerial (optional): given unit name if required. Returns: None if OK, otherwise error as String"
-        if "OTO" in peripherals_list.DUTsprinkler.factoryLocation.upper():
-            factory_location = "OTO_MFG"
-        else:
-            factory_location = "MECO_MFG"
-        # oto_generate_unit_url = "https://us-central1-oto-test-3254b.cloudfunctions.net/masterGenerateUnit"
-        oto_generate_unit_url = 'https://meco-accessor-service-ugegz6xfpa-pd.a.run.app/oto/meco/masterGenerateUnit'
-        requestJson = {
-            "key": "XJhbCu4ujfJF3Ugu",
-            "bomNumber": peripherals_list.DUTsprinkler.bomNumber,
-            "batchNumber": peripherals_list.DUTsprinkler.batchNumber,
-            "macAddress": peripherals_list.DUTsprinkler.macAddress,
-            "flashFactoryLocation": factory_location
-        }
-        if existingSerial is not None:
-            requestJson["unitSerial"] = existingSerial
-        try:
-            self.parent.text_console_logger("Cloud communication...  正在连接云服务器…")            
-            response = requests.post(oto_generate_unit_url, json = requestJson, timeout = 10, allow_redirects = False)
-        except requests.exceptions.ConnectTimeout as error:
-            return f"Can't connect to Firebase website  无法连接数据库网站\n{oto_generate_unit_url}"
-        except requests.exceptions.ConnectionError as error:
-            return f"Can't connect to Firebase website  无法连接数据库网站\n{oto_generate_unit_url}"
-        except Exception as error:
-            return f"Unknown HTTP Request Exception  未知HTTP请求异常:\n{repr(error)}"
-        # Parse response body as a JSON
-        try:
-            responseJson = response.json()
-        except json.JSONDecodeError:
-            return response.content.decode()
-        except Exception:
-            return "Unknown exception during JSON response parse  JSON响应解析异常"
-        # Check response, return error message if not
-        if response.status_code == 200:
-            # Retrieve the response
-            try:
-                newserial = str(responseJson["unitSerial"])
-                peripherals_list.DUTsprinkler.deviceID = newserial
-                if existingSerial is None:
-                    self.parent.text_console_logger(f"Generated unit name 已生成产品号: {peripherals_list.DUTsprinkler.deviceID}, writing to OtO... 存储到OtO...")
-            except Exception as error:
-                return f"Unable to read JSON field in POST response  无法在云服务器中读取JSON字段:\n{repr(error)}"
-        else:
-            ErrorMessage = json.loads(response.content.decode())["error"]
-            if "Firebase found one unit with this MAC address but it does not match the device ID provided. Firebase: oto" in ErrorMessage:
-                newserial = ErrorMessage[102:112]
-                if newserial[0:3] != "oto" or not newserial[3:10].isnumeric() or len(newserial) != 10 or existingSerial != None:
-                    return ErrorMessage
-                else:
-                    self.parent.text_console_logger(f"Updated unit name to match Firebase! 产品编号已更新，以匹配 Firebase! {peripherals_list.DUTsprinkler.deviceID}, writing to OtO... 存储到OtO...")
+        pressure_sensor_check = int(peripherals_list.DUTMLB.get_pressure_sensor_version().pressure_sensor_version)
+
+        if self.class_function in "EOL":  # new fully open test at closed positions uses same limits as zero pressure
+            if pressure_sensor_check == peripherals_list.DUTsprinkler.psig15:
+                max_acceptable_STD: float = 387.8  # Jan 2023 ±4σ
+                min_acceptable_STD: float = 96.5  # Jan 2023 ±4σ
+                max_acceptable_ADC: float = 1786755  # Jan 2023 ±4σ
+                min_acceptable_ADC: float = 1611555  # Jan 2023 ±4σ
+            elif pressure_sensor_check == peripherals_list.DUTsprinkler.psig30:
+                max_acceptable_STD: float = 230  # Jan 2024 from histogram 230
+                min_acceptable_STD: float = 66.5  # Jan 2023/4 66.5
+                max_acceptable_ADC: float = 1875000  # Jan 2024 from histogram 1875000
+                min_acceptable_ADC: float = 1520000  # Jan 2024 from histogram 1520000
             else:
-                return ErrorMessage
-        if existingSerial is None:
-            try:
-                peripherals_list.DUTMLB.set_device_id(newserial)
-            except Exception as f:
-                return f"Unable to write unit name to OtO  无法把产品号写入洒水器: {newserial}"
-            try:
-                peripherals_list.DUTsprinkler.deviceID = peripherals_list.DUTMLB.get_device_id().string
-            except Exception as f:
-                return f"Didn't write unit name to OtO!  未把产品号写入洒水器  {newserial}"
-            if peripherals_list.DUTsprinkler.deviceID != newserial:
-                return f"Unit names don't match!  产品号与洒水器不符  OtO: {peripherals_list.DUTsprinkler.deviceID}, Cloud: {newserial}"
+                return PressureCheckResult(test_status = f"±{self.ERRORS.get('Pressure_Sensor')}", step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
+        elif self.class_function in "MFO_test":  # new fully open test at closed positions uses adjusted limits
+            if pressure_sensor_check == peripherals_list.DUTsprinkler.psig15:
+                max_acceptable_STD: float = 780  # 2x limit from zero pressure
+                min_acceptable_STD: float = 96.5  # Jan 2023 ±4σ
+                max_acceptable_ADC: float = 2100000  # same as 30 psig value
+                min_acceptable_ADC: float = 1611555  # Jan 2023 ±4σ
+            elif pressure_sensor_check == peripherals_list.DUTsprinkler.psig30:
+                max_acceptable_STD: float = 460  # 2x limit from zero pressure
+                min_acceptable_STD: float = 66.5  # Jan 2023/4 66.5
+                max_acceptable_ADC: float = 2100000  # from 2411 data
+                min_acceptable_ADC: float = 1520000  # Jan 2024 from histogram 1520000
+            else:
+                return PressureCheckResult(test_status = f"±{self.ERRORS.get('Pressure_Sensor')}", step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
+        elif self.class_function == "FO_test":
+            if pressure_sensor_check == peripherals_list.DUTsprinkler.psig15:
+                max_acceptable_STD: float = 32000  # confirmed Jan 2023
+                min_acceptable_STD: float = 3000  # confirmed Jan 2023
+                max_acceptable_ADC: float = 5861045  # updated Jan 2023
+                min_acceptable_ADC: float = 4167230  # updated Jan 2023
+            elif pressure_sensor_check == peripherals_list.DUTsprinkler.psig30:
+                max_acceptable_STD: float = 12000  # updated Apr 2023
+                min_acceptable_STD: float = 2000  # updated Apr 2023
+                max_acceptable_ADC: float = 3790000  # updated Apr 2023
+                min_acceptable_ADC: float = 2680000  # updated Apr 2023
+            else:
+                return PressureCheckResult(test_status = f"±{self.ERRORS.get('Pressure_Sensor')}", step_start_time=startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
         else:
-            self.parent.text_console_logger(f"Matched unit name with Firebase  已与数据库匹配产品号: {newserial}")            
-        return None
-    
-class GetUnitNameResult(TestResult):
-    def __init__(self, test_status, step_start_time):
+            return PressureCheckResult(test_status = self.ERRORS.get("Bad_Function"), step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
+
+        standardDeviation:float = 32000  # should be equal to or bigger than min_acceptable_STD defined above
+        number_of_trials:int = 2
+        trial_count:int = 1
+        multiple_STD:int = 5
+        Sensor_Read_List:list = []
+        pressureReading:list = []
+        pressureReadingData:list = []
+        dataCount:int =0
+        mean:int = 0
+        maxDeviation:int = 0
+        maxDeviation_x:int = 0
+        Zero_Tolerance:int = 0
+        setting_n_output: list = []
+        Destination_Folder_1 = None
+        loop_check:bool = True
+        STD_check = True
+        ADC_check = True
+
+        peripherals_list.DUTMLB.use_moving_average_filter(True)
+        while loop_check == True and trial_count <= number_of_trials:
+            Sensor_Read_List:list = []
+            output:list = []
+            pressureReading:list = []
+            pressureReadingData:list = []
+            dataCount:int = 0
+            mean:int = 0
+            maxDeviation:int = 0
+            maxDeviation_x:int = 0
+            Zero_Tolerance:int = 0
+            setting_n_output: list = []
+            standardDeviation = 0
+
+            peripherals_list.DUTMLB.set_sensor_subscribe(subscribe_frequency = peripherals_list.DUTsprinkler.SubscribeFrequency) 
+            time.sleep(0.1)
+            peripherals_list.DUTMLB.clear_incoming_packet_log()
+            main_loop_start_time = time.perf_counter()
+            while time.perf_counter() - main_loop_start_time <= self.data_collection_time:
+                Sensor_Read_List.extend(peripherals_list.DUTMLB.read_all_sensor_packets(limit = None, consume = True))
+            peripherals_list.DUTMLB.set_sensor_subscribe(subscribe_frequency = peripherals_list.DUTsprinkler.SubscribeOff)
+            peripherals_list.DUTMLB.clear_incoming_packet_log()
+
+            if not Sensor_Read_List:
+                PressureCheckResult(test_status = f"±{self.ERRORS.get('Empty List')}", step_start_time = startTime, Zero_P = None, Zero_P_Tolerance = None)
+
+            for message in Sensor_Read_List:
+                pressureReadingData.append([int(message.time_ms), int(message.pressure_adc)])
+                pressureReading.append(int(message.pressure_adc))
+                dataCount += 1
+
+            mean = round(float(np.mean(pressureReading)), 0)
+            standardDeviation = round(float(np.std(pressureReading)), 1)
+            Zero_Tolerance = multiple_STD * standardDeviation
+            for pressure in pressureReading:
+                maxDeviation_x = maxDeviation
+                maxDeviation = abs(mean-pressure)
+                if maxDeviation <= maxDeviation_x: 
+                    maxDeviation = maxDeviation_x
+
+            output.append(mean)
+            output.append(Zero_Tolerance)
+            output.append(multiple_STD)
+            
+            if self.class_function == "EOL":
+                peripherals_list.DUTsprinkler.ZeroPressure = output
+                peripherals_list.DUTsprinkler.ZeroPressureAve = mean
+                peripherals_list.DUTsprinkler.ZeroPressureSTD = standardDeviation
+                function = "Calibrating Zero Pressure"
+                self.parent.create_plot(window = self.parent.GraphHolder, plottype = "histplot", xaxis = pressureReading, yaxis = None, size = None, name = function, clear = False)
+            elif self.class_function in "FO_test MFO_test":
+                peripherals_list.DUTsprinkler.ZeroPressure_Temp = output
+                function = "Valve Fully Open Position Testing"
+                self.parent.create_plot(window = self.parent.GraphHolder, plottype = "fohistplot", xaxis = pressureReading, yaxis = None, size = None, name = function, clear = False)
+            else: 
+                return PressureCheckResult(test_status = f"±{self.ERRORS.get('Bad_Function')}", step_start_time = startTime, Zero_P= mean, Zero_P_Tolerance= Zero_Tolerance)
+          
+            UnitName = peripherals_list.DUTsprinkler.deviceID
+            bom_Number = peripherals_list.DUTsprinkler.bomNumber
+            setting_n_output = ([f"Unit ID: {UnitName}", f"Mean: {mean}", f"STD: {standardDeviation}", f"Max Deviation to Mean: {maxDeviation}", f"Data Points: {dataCount}",
+                                 f"{multiple_STD}x STD: {multiple_STD*standardDeviation}",f"Output List: {output} ", f"BOM Number: {bom_Number}" , f"Valve Target: {self.valve_target}" ,
+                                 "Limits:",f" min and max ADC: [{min_acceptable_ADC} , {max_acceptable_ADC}]",f" min and max Std. Dev.: [{min_acceptable_STD} , {max_acceptable_STD}]"])
+
+            setting_n_output = pd.DataFrame(setting_n_output)
+            Data = pd.DataFrame(pressureReadingData)
+            Data = Data.merge(setting_n_output, suffixes = ["_left", "_right"], left_index = True, right_index = True, how = "outer")
+            Data.columns = ["Timestamp" , "Pressure Reading" , "More info"]
+            Date_Time = str(datetime.now().strftime("%d-%m-%Y %H-%M-%S"))
+
+            if self.class_function == "EOL":
+                Destination_Folder_1 = "Zero P"
+            elif self.class_function in "FO_test MFO_test":
+                Destination_Folder_1 = "Fully Open"
+
+            if UnitName != "":
+                file_name = EstablishLoggingLocation(name = "CollectRawDataWithSubscribe", folder_name = Destination_Folder_1, date_time = Date_Time, parent = self.parent).run_step(peripherals_list = peripherals_list).file_path
+                Data.to_csv(file_name, encoding = "utf-8")
+
+            trial_count += 1
+            if (standardDeviation <= max_acceptable_STD and standardDeviation >= min_acceptable_STD) and (mean <= max_acceptable_ADC and mean >= min_acceptable_ADC):
+                loop_check = False
+
+        if standardDeviation > max_acceptable_STD or standardDeviation < min_acceptable_STD:
+            STD_check = False
+        if mean > max_acceptable_ADC or mean < min_acceptable_ADC:
+            ADC_check = False
+
+        if not STD_check or not ADC_check:
+            if not STD_check and not ADC_check:
+                return PressureCheckResult(test_status = f"±{self.ERRORS.get('BAD_Both')}, Set Min and Max: {min_acceptable_ADC , max_acceptable_ADC}, Measured ADC: {mean}, et Min and Max: {min_acceptable_STD , max_acceptable_STD}, Measured STD: {standardDeviation}", step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
+            if not STD_check:
+                return PressureCheckResult(test_status = f"±{self.ERRORS.get('BAD_STD')}, Set Min and Max: {min_acceptable_STD , max_acceptable_STD}, Measured STD: {standardDeviation}", step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
+            if not ADC_check: 
+                return PressureCheckResult(test_status = f"±Set Min and Max: {min_acceptable_ADC , max_acceptable_ADC}, Measured ADC: {mean}", step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
+
+        return PressureCheckResult(test_status = f"±Zero Pressure Reading: {mean:,} ADC, STD: {standardDeviation:,} ADC", step_start_time = startTime, Zero_P= mean, Zero_P_Tolerance= Zero_Tolerance)
+            
+class PressureCheckResult(TestResult):
+    def __init__(self, test_status: Union[str, None], step_start_time: float, Zero_P:int, Zero_P_Tolerance:int):
         super().__init__(test_status, step_start_time)
+        self.Zero_P = Zero_P
+        self.Zero_P_Tolerance = Zero_P_Tolerance
+
+class SendNozzleHome(TestStep):
+    "Checks if there is a nozzle home position, then sends it there"
+
+    ERRORS: Dict[str,str] = {"Not Valid": "OtO nozzle position value is not valid."}
+
+    def run_step(self, peripherals_list: TestPeripherals):
+        startTime = timeit.default_timer()
+        saved_MLB = None
+        try:
+            saved_MLB = int(peripherals_list.DUTMLB.get_nozzle_home_centidegrees().number)
+        except peripherals_list.DUTsprinkler.NoNVSException:
+            return SendNozzleHomeResult(test_status = f"±No nozzle home position on unit!", step_start_time = startTime, N_Offset_calc = saved_MLB)
+        except Exception as e:
+            return SendNozzleHomeResult(test_status = str(e), step_start_time = startTime, N_Offset_calc = saved_MLB)
+        peripherals_list.DUTsprinkler.nozzleOffset = saved_MLB
+        if saved_MLB > 36000 or saved_MLB < 0:
+            return SendNozzleHomeResult(test_status = f"±{self.ERRORS.get('NotValid')} at {saved_MLB/100}°", step_start_time = startTime, N_Offset_calc = saved_MLB)
+        else:
+            ReturnMessage = peripherals_list.DUTMLB.set_nozzle_position_home(wait_for_complete = True)
+            if ReturnMessage.message_type_string != "CTRL_OUT_COMMAND_COMPLETE":
+                peripherals_list.DUTMLB.set_nozzle_duty(0, 0)
+                return SendNozzleHomeResult(test_status = f"±Nozzle didn't rotate home!!! Nozzle Home Position: {saved_MLB/100}°", step_start_time = startTime, N_Offset_calc = saved_MLB)
+            else:
+                return SendNozzleHomeResult(test_status = f"±Nozzle Home Position: {saved_MLB/100}°", step_start_time = startTime, N_Offset_calc = saved_MLB)
+
+class SendNozzleHomeResult(TestResult):
+    def __init__(self, test_status: Union[str, None], step_start_time: float, N_Offset_calc: int):
+        super().__init__(test_status, step_start_time)
+        self.N_Offset_calc = N_Offset_calc
 
 class TestBattery(TestStep):
     PASS_VOLTAGE:float = 3.5 #4.2V is full, based on stats of 141 units Dec 2023 at Meco
-    ERRORS: Dict[str,str] = {"Low Battery": "Charge battery before retesting.  重新测试前，先给电池充电",
-                         "No Reading": "Error reading battery voltage.  电池电压读取错误"
+    ERRORS: Dict[str,str] = {"Low Battery": "±Charge battery before retesting.",
+                         "No Reading": "±Error reading battery voltage."
                          }
 
     def run_step(self, peripherals_list: TestPeripherals):
         startTime = timeit.default_timer()
+        battVoltage = 0
+        try:  # confirm board has been voltage calibrated before continuing
+            v41calibration = peripherals_list.DUTMLB.get_calibration_voltages().calib_4v1
+        except peripherals_list.DUTsprinkler.NoNVSException:
+            v41calibration = None
+        except Exception as f:  # board was not voltage calibrated
+            return TestBatteryResult(test_status = str(repr(f)), actual_voltage = battVoltage, step_start_time= startTime, pass_criteria = self.PASS_VOLTAGE)
         battVoltage = round(float(peripherals_list.DUTMLB.get_voltages().battery_voltage_v), 3)
         peripherals_list.DUTsprinkler.batteryVoltage = battVoltage
         if battVoltage < self.PASS_VOLTAGE:
             return TestBatteryResult(test_status = self.ERRORS.get("Low Battery") + f"({battVoltage}V)\n", actual_voltage = battVoltage, step_start_time= startTime, pass_criteria = self.PASS_VOLTAGE)
         elif battVoltage == 0:
-            return TestBatteryResult(test_status=self.ERRORS.get("No Reading"), actual_voltage = battVoltage, step_start_time = startTime, pass_criteria = self.PASS_VOLTAGE)
-        return TestBatteryResult(test_status = f"±Battery  电池电压: {battVoltage}V", step_start_time = startTime, actual_voltage = battVoltage, pass_criteria = self.PASS_VOLTAGE)
+            return TestBatteryResult(test_status = self.ERRORS.get("No Reading"), actual_voltage = battVoltage, step_start_time = startTime, pass_criteria = self.PASS_VOLTAGE)
+        return TestBatteryResult(test_status = f"±Battery: {battVoltage}V, calibration: {v41calibration}", step_start_time = startTime, actual_voltage = battVoltage, pass_criteria = self.PASS_VOLTAGE)
 
 class TestBatteryResult(TestResult):
     def __init__(self, pass_criteria: float, actual_voltage: float, test_status,step_start_time):
@@ -889,8 +928,8 @@ class TestExternalPower(TestStep):
     PASS_CURRENTv4 = 0.37  # Based on "calibrated" current results
     MAX_CURRENTv4 =  0.43  # Based on "calibrated" current results
     ERRORS: Dict[str, str] = {
-        "Current Below": "External charging current BELOW limit.  外部充电电流低于极限值",
-        "Current Above": "External charging current ABOVE limit.  外部充电电流高于极限值"
+        "Current Below": "±External charging current BELOW limit.",
+        "Current Above": "±External charging current ABOVE limit."
         }
 
     def run_step(self, peripherals_list: TestPeripherals):
@@ -926,7 +965,7 @@ class TestExternalPower(TestStep):
             Success = peripherals_list.gpioSuite.extPowerPin.get()
         if Success == 1:
             print(Result)
-            return TestExternalPowerResult(test_status = "Can't turn on external power!  无法打开外部电源", step_start_time = startTime, pass_criteria = (self.PASS_VOLTAGE, self.PASS_CURRENT), actual_readings = (0, 0))            
+            return TestExternalPowerResult(test_status = "Can't turn on external power!", step_start_time = startTime, pass_criteria = (self.PASS_VOLTAGE, self.PASS_CURRENT), actual_readings = (0, 0))            
         time.sleep(1)
         chargingVoltage = round(float(peripherals_list.DUTMLB.get_voltages().solar_voltage_v), 3)
         chargingCurrent = round(float(peripherals_list.i2cSuite.i2cLTC2945.get_current() * CurrentFactor), 3)
@@ -938,22 +977,30 @@ class TestExternalPower(TestStep):
 
         if peripherals_list.gpioSuite.extPowerPin.get() != 1:
             print(Result)
-            return TestExternalPowerResult(test_status = "Can't turn off external power!  无法关闭外部电源", step_start_time = startTime, pass_criteria = (self.PASS_VOLTAGE, self.PASS_CURRENT), actual_readings = (chargingVoltage, chargingCurrent))
+            return TestExternalPowerResult(test_status = "Can't turn off external power!", step_start_time = startTime, pass_criteria = (self.PASS_VOLTAGE, self.PASS_CURRENT), actual_readings = (chargingVoltage, chargingCurrent))
 
         if ErrorAfterMeasurement:
-            return TestExternalPowerResult(test_status = f"[{chargingCurrent}A.] Must calibrate current on this new EOL board first!\n必须首先校准这个新的EOL板上的电流!\n{peripherals_list.DUTsprinkler.testFixtureName}", step_start_time = startTime, pass_criteria = (self.PASS_VOLTAGE, self.PASS_CURRENT), actual_readings = (0, 0))
+            return TestExternalPowerResult(test_status = f"[{chargingCurrent}A.] Must calibrate current on this new EOL board first!\n{peripherals_list.DUTsprinkler.testFixtureName}", step_start_time = startTime, pass_criteria = (self.PASS_VOLTAGE, self.PASS_CURRENT), actual_readings = (0, 0))
 
         battery_voltage = peripherals_list.DUTsprinkler.batteryVoltage
         if battery_voltage >= 4.0:  # if battery charge is high, the lower limit of current can be dramatically affected, so update the limit
             self.PASS_CURRENT = 0.00
             self.PASS_CURRENTv4 = 0.03
-
-        if self.PASS_CURRENTv4 <= chargingCurrent <= self.MAX_CURRENTv4:
-            return TestExternalPowerResult(test_status = f"±Charging 充电中: {chargingCurrent}A" , step_start_time = startTime, pass_criteria = (self.PASS_VOLTAGE, self.PASS_CURRENTv4), actual_readings = (chargingVoltage, chargingCurrent))
-        elif chargingCurrent < self.PASS_CURRENTv4:
-            return TestExternalPowerResult(test_status = self.ERRORS.get("Current Below") + f" {chargingCurrent}A", step_start_time = startTime, pass_criteria = (self.PASS_VOLTAGE, self.PASS_CURRENTv4), actual_readings = (chargingVoltage, chargingCurrent))
-        elif chargingCurrent > self.MAX_CURRENTv4:
-            return TestExternalPowerResult(test_status = self.ERRORS.get("Current Above") + f" {chargingCurrent}A", step_start_time = startTime, pass_criteria = (self.PASS_VOLTAGE, self.PASS_CURRENTv4), actual_readings = (chargingVoltage, chargingCurrent))
+        
+        if "-v4" in peripherals_list.DUTsprinkler.Firmware or "-v5" in peripherals_list.DUTsprinkler.Firmware:
+            if self.PASS_CURRENTv4 <= chargingCurrent <= self.MAX_CURRENTv4:
+                return TestExternalPowerResult(test_status = f"±Charging: {chargingCurrent}A" , step_start_time = startTime, pass_criteria = (self.PASS_VOLTAGE, self.PASS_CURRENTv4), actual_readings = (chargingVoltage, chargingCurrent))
+            elif chargingCurrent < self.PASS_CURRENTv4:
+                return TestExternalPowerResult(test_status = self.ERRORS.get("Current Below") + f"({self.PASS_CURRENTv4}A), {chargingCurrent}A", step_start_time = startTime, pass_criteria = (self.PASS_VOLTAGE, self.PASS_CURRENTv4), actual_readings = (chargingVoltage, chargingCurrent))
+            elif chargingCurrent > self.MAX_CURRENTv4:
+                return TestExternalPowerResult(test_status = self.ERRORS.get("Current Above") + f"({self.MAX_CURRENTv4}A), {chargingCurrent}A", step_start_time = startTime, pass_criteria = (self.PASS_VOLTAGE, self.PASS_CURRENTv4), actual_readings = (chargingVoltage, chargingCurrent))
+        else:
+            if self.PASS_CURRENT <= chargingCurrent <= self.MAX_CURRENT:
+                return TestExternalPowerResult(test_status = f"±Charging: {chargingCurrent}A, {chargingVoltage}V" , step_start_time = startTime, pass_criteria = (self.PASS_VOLTAGE, self.PASS_CURRENTv4), actual_readings = (chargingVoltage, chargingCurrent))
+            elif chargingCurrent < self.PASS_CURRENT:
+                return TestExternalPowerResult(test_status = self.ERRORS.get("Current Below") + f"({self.PASS_CURRENT}A), {chargingCurrent}A, {chargingVoltage}V", step_start_time = startTime, pass_criteria = (self.PASS_VOLTAGE, self.PASS_CURRENTv4), actual_readings = (chargingVoltage, chargingCurrent))
+            elif chargingCurrent > self.MAX_CURRENT:
+                return TestExternalPowerResult(test_status = self.ERRORS.get("Current Above") + f"({self.MAX_CURRENT}A), {chargingCurrent}A, {chargingVoltage}V", step_start_time = startTime, pass_criteria = (self.PASS_VOLTAGE, self.PASS_CURRENTv4), actual_readings = (chargingVoltage, chargingCurrent))
 
 class TestExternalPowerResult(TestResult):
     def __init__(self, actual_readings: tuple[float,float], pass_criteria: tuple[float,float], test_status, step_start_time):
@@ -992,11 +1039,11 @@ class TestMoesFullyOpen(TestStep):
                 peripherals_list.DUTsprinkler.valveFullyOpenTrials = Repeats
                 ReturnMessage = peripherals_list.DUTMLB.set_valve_position(valve_position_centideg = Targets[CurrentTarget], wait_for_complete = True)
                 if ReturnMessage.message_type_string != "CTRL_OUT_COMMAND_COMPLETE":
-                    return TestMoesFullyOpenResult(test_status = str(f"OtO valve did not move to {round(Targets[CurrentTarget]/100, 2)}° in time.\n洒水器阀门未及时移动到目标位置"), step_start_time = startTime)
+                    return TestMoesFullyOpenResult(test_status = str(f"±OtO valve did not move to {round(Targets[CurrentTarget]/100, 2)}° in time."), step_start_time = startTime)
                 peripherals_list.DUTsprinkler.ZeroPressure_Temp.clear()
                 peripherals_list.gpioSuite.airSolenoidPin.set(0) # turn on air
                 time.sleep(0.3)  # give some time to build pressure
-                result = PressureCheck(name = "Fully Open Test 阀门全打开测试", data_collection_time = dataCollectionTime , class_function= "MFO_test" , valve_target = target, parent = self.parent).run_step(peripherals_list)
+                result = PressureCheck(name = "Fully Open Position Test", data_collection_time = dataCollectionTime , class_function= "MFO_test" , valve_target = target, parent = self.parent).run_step(peripherals_list)
                 peripherals_list.gpioSuite.airSolenoidPin.set(1) # turn off air
                 if peripherals_list.DUTsprinkler.ZeroPressure_Temp:
                     pressure_reading_list = peripherals_list.DUTsprinkler.ZeroPressure_Temp
@@ -1011,7 +1058,7 @@ class TestMoesFullyOpen(TestStep):
                         peripherals_list.DUTsprinkler.valveFullyOpen3STD = standard_deviation
                         Finished = True
                 if result.test_status != None and result.test_status[0] != "±":
-                    return TestMoesFullyOpenResult(f"{round(Targets[CurrentTarget-1]/100, 2)}° pressure reading not within specification. " + result.test_status +"\n点压力读数不在规定范围内", step_start_time = startTime)
+                    return TestMoesFullyOpenResult(f"±{round(Targets[CurrentTarget-1]/100, 2)}° pressure reading not within specification.\n" + result.test_status, step_start_time = startTime)
             Span = peripherals_list.DUTsprinkler.valveFullyOpen1Ave - peripherals_list.DUTsprinkler.valveFullyOpen3Ave
             SigmaSpan = abs(peripherals_list.DUTsprinkler.valveFullyOpen1STD - peripherals_list.DUTsprinkler.valveFullyOpen3STD)
             if abs(Span) < SpanTolerance and SigmaSpan < SigmaSpanTolerance:
@@ -1043,7 +1090,7 @@ class TestMoesFullyOpen(TestStep):
                     return TestMoesFullyOpenResult(test_status = f"OtO's saved valve position {fw_ValveOffset/100}° does not match computer value {memory_ValveOffset/100}°.", step_start_time = startTime)
                 Repeats += 1
         ReturnMessage = peripherals_list.DUTMLB.set_valve_closed()
-        return TestMoesFullyOpenResult(test_status = f"Failed Fully Open Test {Span}", step_start_time = startTime)
+        return TestMoesFullyOpenResult(test_status = f"±Failed Fully Open Test [{SpanTolerance}, {SigmaSpanTolerance}]: {Span}, {SigmaSpan}", step_start_time = startTime)
         
 class TestMoesFullyOpenResult(TestResult):
 
@@ -1051,20 +1098,17 @@ class TestMoesFullyOpenResult(TestResult):
         super().__init__(test_status, step_start_time)
 
 class TestPump(TestStep):
-    '''
-    these switches are normally closed so 0 indicates that the switch triggered due to vacuum at the switch
-    '''
+    "vacuum switches are normally closed so 0 indicates that the switch triggered due to vacuum at the switch"
+
     PASS_TIME:float = 5.608  # based on BPT pumps, 2k sample, ±4σ
     TIMEOUT:float = 5.608
     PING_TIME:float = 8.0 # it will never ping now since we expect it to pass within 5 seconds.
-    SI_UNITS:str = "s"
-    ERRORS: Dict[str,str] = {"No Pumps": "OtO pump failed.  洒水器蠕动泵失效",
-                             "Wrong Pump": "Wrong OtO pump ran, tear down unit to check hose and wiring connections.\n洒水器蠕动泵运行错误, 把洒水器拆下来, 检查水管是否连接正确, 接线是否正确\n",
+    ERRORS: Dict[str,str] = {"No Pumps": "±OtO pump failed.",
+                             "Wrong Pump": "±Wrong OtO pump ran!",
                              "Invalid Target Pump": "Target pump must be 1, 2 or 3"
                              }
     DEFAULT_PUMP_DUTY = 100
     CAPS: str = "Black", "Blue", "Orange"
-    CAPSC: str = "黑", "蓝", "橘"
 
     def __init__(self, target_pump: int, name: str, parent: tk, target_pump_duty = None):
         super().__init__(name, parent)
@@ -1085,7 +1129,7 @@ class TestPump(TestStep):
         else:
             UseSubscribe = True
 
-        UseSubscribe = False  # Can't get pump subscribe to work consistently on EOL, randomly see unknown program errors during pump test
+        # UseSubscribe = False  # Can't get pump subscribe to work consistently on EOL, randomly see unknown program errors during pump test
 
         if self.target_pump == 1 or self.target_pump == 2 or self.target_pump == 3:
             if UseSubscribe:
@@ -1102,42 +1146,43 @@ class TestPump(TestStep):
                         PumpCurrent.append(DataPoint.pump_current_mA)
                 else:
                     PumpCurrent.append([round(float(peripherals_list.DUTMLB.get_currents().pump_current_mA), 3)])
-                if peripherals_list.gpioSuite.vacSwitchPin1.get() == 0 and peripherals_list.DUTsprinkler.pump1Pass is False:
-                    if UseSubscribe:
-                        ReturnMessage = peripherals_list.DUTMLB.set_sensor_subscribe(subscribe_frequency = peripherals_list.DUTsprinkler.SubscribeOff)
-                        peripherals_list.DUTMLB.clear_incoming_packet_log()
-                    ReturnMessage = peripherals_list.DUTMLB.set_pump_duty_cycle(pump_bay = self.target_pump, pump_duty_cycle = 0)
-                    peripherals_list.DUTsprinkler.pump1Pass = True
-                    peripherals_list.DUTsprinkler.Pump1CurrentAve = round(float(np.average(PumpCurrent)), 1)
-                    peripherals_list.DUTsprinkler.Pump1CurrentSTD = round(float(np.std(PumpCurrent)), 2)
-                    if self.target_pump == 1:
-                        return TestPumpResult(test_status = f"±Pump 1  1号泵: {round(timeit.default_timer() - startTime, 3)} sec, {peripherals_list.DUTsprinkler.Pump1CurrentAve} mA, STD {peripherals_list.DUTsprinkler.Pump1CurrentSTD} mA", step_start_time = startTime, pass_criteria = self.PASS_TIME)
-                    else:
-                        return TestPumpResult(test_status = self.ERRORS.get("Wrong Pump") + f" Expected 应启动蠕动泵号: {self.target_pump}, Triggered 实际启动蠕动泵号: Pump 蠕动泵 1", step_start_time = startTime, pass_criteria = self.PASS_TIME)
-                if peripherals_list.gpioSuite.vacSwitchPin2.get() == 0 and peripherals_list.DUTsprinkler.pump2Pass is False:
-                    if UseSubscribe:
-                        ReturnMessage = peripherals_list.DUTMLB.set_sensor_subscribe(subscribe_frequency = peripherals_list.DUTsprinkler.SubscribeOff)
-                        peripherals_list.DUTMLB.clear_incoming_packet_log()
-                    ReturnMessage = peripherals_list.DUTMLB.set_pump_duty_cycle(pump_bay = self.target_pump, pump_duty_cycle = 0)
-                    peripherals_list.DUTsprinkler.pump2Pass = True
-                    peripherals_list.DUTsprinkler.Pump2CurrentAve = round(float(np.average(PumpCurrent)), 1)
-                    peripherals_list.DUTsprinkler.Pump2CurrentSTD = round(float(np.std(PumpCurrent)), 2)
-                    if self.target_pump == 2:
-                        return TestPumpResult(test_status = f"±Pump 2  2号泵: {round(timeit.default_timer() - startTime, 3)} sec, {peripherals_list.DUTsprinkler.Pump2CurrentAve} mA, STD {peripherals_list.DUTsprinkler.Pump2CurrentSTD} mA", step_start_time = startTime, pass_criteria = self.PASS_TIME)
-                    else:
-                        return TestPumpResult(test_status=self.ERRORS.get("Wrong Pump") + f" Expected 应启动蠕动泵号: {self.target_pump}, Triggered 实际启动蠕动泵号: Pump 蠕动泵 2", step_start_time = startTime, pass_criteria = self.PASS_TIME)
-                if peripherals_list.gpioSuite.vacSwitchPin3.get() == 0 and peripherals_list.DUTsprinkler.pump3Pass is False:
-                    if UseSubscribe:
-                        ReturnMessage = peripherals_list.DUTMLB.set_sensor_subscribe(subscribe_frequency = peripherals_list.DUTsprinkler.SubscribeOff)
-                        peripherals_list.DUTMLB.clear_incoming_packet_log()
-                    ReturnMessage = peripherals_list.DUTMLB.set_pump_duty_cycle(pump_bay = self.target_pump, pump_duty_cycle = 0)
-                    peripherals_list.DUTsprinkler.pump3Pass = True
-                    peripherals_list.DUTsprinkler.Pump3CurrentAve = round(float(np.average(PumpCurrent)), 1)
-                    peripherals_list.DUTsprinkler.Pump3CurrentSTD = round(float(np.std(PumpCurrent)), 2)
-                    if self.target_pump == 3:
-                        return TestPumpResult(test_status = f"±Pump 3  3号泵: {round(timeit.default_timer() - startTime, 3)} sec, {peripherals_list.DUTsprinkler.Pump3CurrentAve} mA, STD {peripherals_list.DUTsprinkler.Pump3CurrentSTD} mA", step_start_time = startTime, pass_criteria = self.PASS_TIME)
-                    else:
-                        return TestPumpResult(test_status = self.ERRORS.get("Wrong Pump") + f" Expected 应启动蠕动泵号: {self.target_pump}, Triggered 实际启动蠕动泵号: Pump 蠕动泵 3", step_start_time = startTime, pass_criteria = self.PASS_TIME)
+                if peripherals_list.DUTsprinkler.pump1Pass is False:
+                    if peripherals_list.gpioSuite.vacSwitchPin1.get() == 0:
+                        if UseSubscribe:
+                            ReturnMessage = peripherals_list.DUTMLB.set_sensor_subscribe(subscribe_frequency = peripherals_list.DUTsprinkler.SubscribeOff)
+                            peripherals_list.DUTMLB.clear_incoming_packet_log()
+                        ReturnMessage = peripherals_list.DUTMLB.set_pump_duty_cycle(pump_bay = self.target_pump, pump_duty_cycle = 0)
+                        peripherals_list.DUTsprinkler.pump1Pass = True
+                        peripherals_list.DUTsprinkler.Pump1CurrentAve = round(float(np.average(PumpCurrent)), 1)
+                        peripherals_list.DUTsprinkler.Pump1CurrentSTD = round(float(np.std(PumpCurrent)), 2)
+                        if self.target_pump == 1:
+                            return TestPumpResult(test_status = f"±Pump 1: {round(timeit.default_timer() - startTime, 3)} sec, {peripherals_list.DUTsprinkler.Pump1CurrentAve} mA, STD {peripherals_list.DUTsprinkler.Pump1CurrentSTD} mA", step_start_time = startTime, pass_criteria = self.PASS_TIME)
+                        else:
+                            return TestPumpResult(test_status = self.ERRORS.get("Wrong Pump") + f" Expected: {self.target_pump}, Triggered: Pump 1", step_start_time = startTime, pass_criteria = self.PASS_TIME)
+                    if peripherals_list.gpioSuite.vacSwitchPin2.get() == 0:
+                        if UseSubscribe:
+                            ReturnMessage = peripherals_list.DUTMLB.set_sensor_subscribe(subscribe_frequency = peripherals_list.DUTsprinkler.SubscribeOff)
+                            peripherals_list.DUTMLB.clear_incoming_packet_log()
+                        ReturnMessage = peripherals_list.DUTMLB.set_pump_duty_cycle(pump_bay = self.target_pump, pump_duty_cycle = 0)
+                        peripherals_list.DUTsprinkler.pump2Pass = True
+                        peripherals_list.DUTsprinkler.Pump2CurrentAve = round(float(np.average(PumpCurrent)), 1)
+                        peripherals_list.DUTsprinkler.Pump2CurrentSTD = round(float(np.std(PumpCurrent)), 2)
+                        if self.target_pump == 2:
+                            return TestPumpResult(test_status = f"±Pump 2: {round(timeit.default_timer() - startTime, 3)} sec, {peripherals_list.DUTsprinkler.Pump2CurrentAve} mA, STD {peripherals_list.DUTsprinkler.Pump2CurrentSTD} mA", step_start_time = startTime, pass_criteria = self.PASS_TIME)
+                        else:
+                            return TestPumpResult(test_status=self.ERRORS.get("Wrong Pump") + f" Expected: {self.target_pump}, Triggered: Pump 2", step_start_time = startTime, pass_criteria = self.PASS_TIME)
+                    if peripherals_list.gpioSuite.vacSwitchPin3.get() == 0:
+                        if UseSubscribe:
+                            ReturnMessage = peripherals_list.DUTMLB.set_sensor_subscribe(subscribe_frequency = peripherals_list.DUTsprinkler.SubscribeOff)
+                            peripherals_list.DUTMLB.clear_incoming_packet_log()
+                        ReturnMessage = peripherals_list.DUTMLB.set_pump_duty_cycle(pump_bay = self.target_pump, pump_duty_cycle = 0)
+                        peripherals_list.DUTsprinkler.pump3Pass = True
+                        peripherals_list.DUTsprinkler.Pump3CurrentAve = round(float(np.average(PumpCurrent)), 1)
+                        peripherals_list.DUTsprinkler.Pump3CurrentSTD = round(float(np.std(PumpCurrent)), 2)
+                        if self.target_pump == 3:
+                            return TestPumpResult(test_status = f"±Pump 3: {round(timeit.default_timer() - startTime, 3)} sec, {peripherals_list.DUTsprinkler.Pump3CurrentAve} mA, STD {peripherals_list.DUTsprinkler.Pump3CurrentSTD} mA", step_start_time = startTime, pass_criteria = self.PASS_TIME)
+                        else:
+                            return TestPumpResult(test_status = self.ERRORS.get("Wrong Pump") + f" Expected: {self.target_pump}, Triggered: Pump 3", step_start_time = startTime, pass_criteria = self.PASS_TIME)
 
             if UseSubscribe:
                 ReturnMessage = peripherals_list.DUTMLB.set_sensor_subscribe(subscribe_frequency = peripherals_list.DUTsprinkler.SubscribeOff)
@@ -1156,10 +1201,10 @@ class TestPump(TestStep):
 
             if "-v3" not in peripherals_list.DUTsprinkler.Firmware:
                 if round(float(np.average(PumpCurrent)), 1) == 0:
-                    return TestPumpResult(test_status = f"Pump {self.target_pump} did not run. 蠕动泵号:{self.target_pump} 未启动。\nPump current 蠕动泵内部电流: {round(float(np.average(PumpCurrent)), 1)} mA, STD {round(float(np.std(PumpCurrent)), 2)}", step_start_time = startTime, pass_criteria = self.PASS_TIME)
+                    return TestPumpResult(test_status = f"±Pump {self.target_pump} did not run. Pump current: {round(float(np.average(PumpCurrent)), 1)} mA, STD {round(float(np.std(PumpCurrent)), 2)}", step_start_time = startTime, pass_criteria = self.PASS_TIME)
                 elif round(float(np.average(PumpCurrent)), 1) > 600:
-                    return TestPumpResult(test_status = f"Pump {self.target_pump} is stalled. 蠕动泵号:{self.target_pump} 堵转。\nPump current: {round(float(np.average(PumpCurrent)), 1)} mA, STD {round(float(np.std(PumpCurrent)), 2)}", step_start_time = startTime, pass_criteria = self.PASS_TIME)
-            return TestPumpResult(test_status = self.ERRORS.get("No Pumps") + f" Check {self.CAPS[self.target_pump - 1]} cap is tight. 检查{self.CAPSC[self.target_pump - 1]}色盖子是否拧紧。\nPump current 蠕动泵电流: {round(float(np.average(PumpCurrent)), 1)} mA, STD {round(float(np.std(PumpCurrent)), 2)}", step_start_time = startTime, pass_criteria = self.PASS_TIME)
+                    return TestPumpResult(test_status = f"±Pump {self.target_pump} is stalled. Pump current: {round(float(np.average(PumpCurrent)), 1)} mA, STD {round(float(np.std(PumpCurrent)), 2)}", step_start_time = startTime, pass_criteria = self.PASS_TIME)
+            return TestPumpResult(test_status = self.ERRORS.get("No Pumps") + f" Check {self.CAPS[self.target_pump - 1]} cap is tight. Pump current: {round(float(np.average(PumpCurrent)), 1)} mA, STD {round(float(np.std(PumpCurrent)), 2)}", step_start_time = startTime, pass_criteria = self.PASS_TIME)
         else:
             return TestPumpResult(test_status = self.ERRORS.get("Invalid Target Pump"), step_start_time = startTime, pass_criteria = self.PASS_TIME)
 
@@ -1169,17 +1214,19 @@ class TestPumpResult(TestResult):
         self.pass_criteria = pass_criteria
 
 class TestSolar(TestStep):
+    "Test the solar panel for voltage / current under LED light"
+
     PASS_VOLTAGE: float = 6.417  # Jan 2023 update ±4σ
     MAX_VOLTAGE: float = 9  # Temporary increase for new LED board
     PASS_CURRENT: float = 40  # update per 141 unit build at Meco Dec 2023
     MAX_CURRENT: float = 345  # update per 141 unit build at Meco Dec 2023
     SI_UNITS: str = "ADC"
-    ERRORS: Dict[str,str] = {"Solar Below": 'Solar panel voltage BELOW limit.',
-                             "Solar Above": 'Solar panel voltage ABOVE limit.',
-                             "No Voltage": 'No solar panel voltage was read from the OtO.',
-                             "Solar BelowC": 'Solar panel current BELOW limit.  太阳能板电流低于极限值',
-                             "Solar AboveC": 'Solar panel current ABOVE limit.  太阳能板电流高于极限值',
-                             "No Current": 'No solar panel current was read from the OtO.\n从洒水器未读取到太阳能板产生电流'
+    ERRORS: Dict[str,str] = {"Solar Below": "±Solar panel voltage BELOW limit. ",
+                             "Solar Above": "±Solar panel voltage ABOVE limit. ",
+                             "No Voltage": "No solar panel voltage was read from the OtO.",
+                             "Solar BelowC": "±Solar panel current BELOW limit. ",
+                             "Solar AboveC": "±Solar panel current ABOVE limit. ",
+                             "No Current": "±No solar panel current was read from the OtO."
                              }
 
     def run_step(self, peripherals_list: TestPeripherals):
@@ -1190,17 +1237,38 @@ class TestSolar(TestStep):
         peripherals_list.gpioSuite.ledPanelPin.set(0)  #turn on LED
         time.sleep(0.3)
         solarCurrent = round(float(peripherals_list.DUTMLB.get_currents().charge_current_mA), 0)
+        solarVoltage = round(float(peripherals_list.DUTMLB.get_voltages().solar_voltage_v), 2)
         peripherals_list.DUTsprinkler.solarCurrent = solarCurrent
-        peripherals_list.gpioSuite.ledPanelPin.set(1)  #turn off LED 
-        if self.PASS_CURRENT <= solarCurrent <= self.MAX_CURRENT:
-            return TestSolarResult(test_status = f"±Solar Panel {solarCurrent}mA", step_start_time = startTime, pass_criteria = self.PASS_CURRENT, actual_current = solarCurrent, actual_voltage = 0)
-        elif solarCurrent >= self.MAX_CURRENT:
-            return TestSolarResult(test_status = self.ERRORS.get("Solar AboveC") + f"{solarCurrent}mA", step_start_time = startTime, pass_criteria = self.PASS_CURRENT, actual_current = solarCurrent, actual_voltage = 0)
-        elif solarCurrent < self.PASS_CURRENT and solarCurrent != 0:
-            return TestSolarResult(test_status = self.ERRORS.get("Solar BelowC")+ f"{solarCurrent}mA", step_start_time = startTime, pass_criteria = self.PASS_CURRENT, actual_current = solarCurrent, actual_voltage = 0)
-        elif solarCurrent == 0:
-            return TestSolarResult(test_status = self.ERRORS.get("No Current"), step_start_time = startTime, pass_criteria = self.PASS_CURRENT, actual_current = solarCurrent, actual_voltage = 0)
-
+        peripherals_list.DUTsprinkler.solarVoltage = solarVoltage
+        peripherals_list.gpioSuite.ledPanelPin.set(1)  #turn off LED
+        if "-v4" in peripherals_list.DUTsprinkler.Firmware or "-v5" in peripherals_list.DUTsprinkler.Firmware:
+            if self.PASS_CURRENT <= solarCurrent <= self.MAX_CURRENT:
+                return TestSolarResult(test_status = f"±Solar Panel {solarCurrent}mA", step_start_time = startTime, pass_criteria = self.PASS_CURRENT, actual_current = solarCurrent, actual_voltage = 0)
+            elif solarCurrent >= self.MAX_CURRENT:
+                return TestSolarResult(test_status = self.ERRORS.get("Solar AboveC") + f"[{self.MAX_CURRENT}]: {solarCurrent}mA", step_start_time = startTime, pass_criteria = self.PASS_CURRENT, actual_current = solarCurrent, actual_voltage = 0)
+            elif solarCurrent < self.PASS_CURRENT and solarCurrent != 0:
+                return TestSolarResult(test_status = self.ERRORS.get("Solar BelowC")+ f"[{self.PASS_CURRENT}]: {solarCurrent}mA", step_start_time = startTime, pass_criteria = self.PASS_CURRENT, actual_current = solarCurrent, actual_voltage = 0)
+            elif solarCurrent == 0:
+                return TestSolarResult(test_status = self.ERRORS.get("No Current"), step_start_time = startTime, pass_criteria = self.PASS_CURRENT, actual_current = solarCurrent, actual_voltage = 0)
+        else:
+            if self.PASS_CURRENT <= solarCurrent <= self.MAX_CURRENT:
+                TestStatus = f"±Solar Panel {solarCurrent}mA, "
+            elif solarCurrent >= self.MAX_CURRENT:
+                TestStatus = self.ERRORS.get("Solar AboveC") + f"[{self.MAX_CURRENT}]: {solarCurrent}mA, "
+            elif solarCurrent < self.PASS_CURRENT and solarCurrent != 0:
+                TestStatus = self.ERRORS.get("Solar BelowC")+ f"[{self.PASS_CURRENT}]: {solarCurrent}mA, "
+            elif solarCurrent == 0:
+                TestStatus = self.ERRORS.get("No Current") + ", "
+            if self.PASS_VOLTAGE <= solarCurrent <= self.MAX_VOLTAGE:
+                TestStatus += f"±{solarVoltage}V"
+            elif solarCurrent >= self.MAX_VOLTAGE:
+                TestStatus += self.ERRORS.get("Solar Above") + f"[{self.MAX_VOLTAGE}]: {solarVoltage}V"
+            elif solarCurrent < self.PASS_VOLTAGE and solarVoltage != 0:
+                TestStatus += self.ERRORS.get("Solar Below")+ f"[{self.PASS_VOLTAGE}]: {solarVoltage}V"
+            elif solarCurrent == 0:
+                TestStatus += self.ERRORS.get("No Voltage")
+            return TestSolarResult(test_status = TestStatus, step_start_time = startTime, pass_criteria = self.PASS_CURRENT, actual_current = solarCurrent, actual_voltage = solarVoltage)
+        
 class TestSolarResult(TestResult):
     def __init__(self, pass_criteria: float, actual_voltage: float, actual_current: float, test_status, step_start_time):
         super().__init__(test_status, step_start_time)
@@ -1209,9 +1277,10 @@ class TestSolarResult(TestResult):
         self.actual_current = actual_current
 
 class ValveCalibration(TestStep):
+    "Will run valve calibration, and compare offset to what is stored on the OtO - doesn't update OtO memory"
 
-    ERRORS: dict = {"EmptyList": "No valve rotation values were received from OtO.",
-                    "BackwardRotation": "Valve rotating backwards!"}
+    ERRORS: dict = {"EmptyList": "±No valve rotation values were received from OtO.",
+                    "BackwardRotation": "±Valve rotating backwards!"}
     VALVE_ROTATION_DUTY_CYCLE = 90
     TurnRecordingOn = 1875000  # Turn recording on when ADC pressure value is below this value.
     MaxAngleBeforeShutoff = 12000  # how far to rotate before pressure must have dropped below TurnRecordingOn value
@@ -1258,7 +1327,7 @@ class ValveCalibration(TestStep):
         TestPosition = (CurrentValvePosition + 35500) % 36000
         ReturnMessage = peripherals_list.DUTMLB.set_valve_position(valve_position_centideg = TestPosition, wait_for_complete = True)
         if ReturnMessage.message_type_string != "CTRL_OUT_COMMAND_COMPLETE":
-            return ValveCalibrationResult (test_status = "Valve won't rotate backwards!  球阀无法反转", step_start_time = start_time)
+            return ValveCalibrationResult (test_status = "±Valve won't rotate backwards!", step_start_time = start_time)
         if not hasattr(peripherals_list, "gpioSuite"): # if called by itself by one button press
             new_gpio = GpioSuite()
             peripherals_list.add_device(new_object = new_gpio)
@@ -1354,31 +1423,20 @@ class ValveCalibration(TestStep):
         
         peripherals_list.DUTsprinkler.valveRawData = valve_calibration_data
 
-        self.parent.text_console_logger(f"Valve Motor {peripherals_list.DUTsprinkler.ValveCurrentAve} mA, STD {peripherals_list.DUTsprinkler.ValveCurrentSTD} mA")
+        if "-v4" in peripherals_list.DUTsprinkler.Firmware or "-v5" in peripherals_list.DUTsprinkler.Firmware:
+            self.parent.text_console_logger(f"Valve Motor {peripherals_list.DUTsprinkler.ValveCurrentAve} mA, STD {peripherals_list.DUTsprinkler.ValveCurrentSTD} mA")
 
         pressure_sensor_check = peripherals_list.DUTMLB.get_pressure_sensor_version().pressure_sensor_version
-        if socket.gethostname() not in KK_LAPTOP_LIST:
-            if pressure_sensor_check == peripherals_list.DUTsprinkler.psig15:
-                minimum_acceptable_peak_pressure = 4000000 # ADC, about 1 psi
-                maximum_acceptable_peak_pressure = 6000000 # ADC, about 4.8 psi
-                self.MaxPeakDifference = 150000  # maximum pressure difference between the two peaks
-                self.MaxAngleDifference = 210  # maximum allowable difference in angle (centideg) between peaks from 180°
-            elif pressure_sensor_check == peripherals_list.DUTsprinkler.psig30:
-                minimum_acceptable_peak_pressure = 2680000  # Apr 2023 match FOT values
-                maximum_acceptable_peak_pressure = 3790000  # Apr 2023 match FOT values
-            else:
-                return ValveCalibrationResult (test_status = "Can't identify pressure sensor!", step_start_time = start_time)
+        if pressure_sensor_check == peripherals_list.DUTsprinkler.psig15:
+            minimum_acceptable_peak_pressure = 4000000 # ADC, about 1 psi
+            maximum_acceptable_peak_pressure = 6000000 # ADC, about 4.8 psi
+            self.MaxPeakDifference = 150000  # maximum pressure difference between the two peaks
+            self.MaxAngleDifference = 210  # maximum allowable difference in angle (centideg) between peaks from 180°
+        elif pressure_sensor_check == peripherals_list.DUTsprinkler.psig30:
+            minimum_acceptable_peak_pressure = 2680000  # Apr 2023 match FOT values
+            maximum_acceptable_peak_pressure = 3790000  # Apr 2023 match FOT values
         else:
-            if pressure_sensor_check == peripherals_list.DUTsprinkler.psig15:
-                minimum_acceptable_peak_pressure = 3500000 # LEAVING ALONE TO MATCH PRODUCTION
-                maximum_acceptable_peak_pressure = 6000000 # 2022/09/04 UPDATE 4 STD
-                self.MaxPeakDifference = 150000  # maximum pressure difference between the two peaks
-                self.MaxAngleDifference = 210  # maximum allowable difference in angle (centideg) between peaks from 180°
-            elif pressure_sensor_check == peripherals_list.DUTsprinkler.psig30:
-                minimum_acceptable_peak_pressure = 2680000  # LEAVING ALONE TO MATCH PRODUCTION
-                maximum_acceptable_peak_pressure = 6315845  # 2022/09/04 UPDATE 3 STD
-            else:
-                return ValveCalibrationResult (test_status = "Can't identify pressure sensor!", step_start_time = start_time)
+            return ValveCalibrationResult (test_status = "±Can't identify pressure sensor!", step_start_time = start_time)
 
         ValvePositionData.clear()
         PressureData.clear()
@@ -1386,12 +1444,12 @@ class ValveCalibration(TestStep):
             ValvePositionData.append(valve_calibration_data[i][0])
             PressureData.append(valve_calibration_data[i][1])
         
-        self.parent.create_plot(window = self.parent.GraphHolder, plottype = "lineplot", xaxis = ValvePositionData, yaxis = PressureData, size = 12, name = "Valve Calibration 校准阀门", clear = False)
+        self.parent.create_plot(window = self.parent.GraphHolder, plottype = "lineplot", xaxis = ValvePositionData, yaxis = PressureData, size = 12, name = "Valve Calibration", clear = False)
 
         sos = signal.butter(N = 2, Wn = 0.6, btype = "lowpass", output = "sos", fs = SamplingFrequency)
         FinalPressure = signal.sosfiltfilt(sos, x = PressureData, padtype = "odd", padlen = 50)
         
-        self.parent.create_plot(window = self.parent.GraphHolder, plottype = "lineplot", xaxis = ValvePositionData, yaxis = FinalPressure, size = 15, name = "Valve Calibration 校准阀门", clear = False)
+        self.parent.create_plot(window = self.parent.GraphHolder, plottype = "lineplot", xaxis = ValvePositionData, yaxis = FinalPressure, size = 15, name = "Valve Calibration", clear = False)
 
         peak_list_index, properties = find_peaks(FinalPressure)
         
@@ -1428,29 +1486,29 @@ class ValveCalibration(TestStep):
             self.parent.create_plot(window = self.parent.GraphHolder, plottype = "lineplot", xaxis = [main2peaks_position[1]], yaxis = [second_peak], size = 60, name = "Valve Calibration 校准阀门", clear = True)
             if first_peak != 0:
                 if abs(first_peak - peripherals_list.DUTsprinkler.ZeroPressureAve) < 150000:
-                    return ValveCalibrationResult (test_status = "Possible plugged or disconnected pressure sensor!  压力传感器可能被堵住", step_start_time = start_time)
+                    return ValveCalibrationResult (test_status = "±Possible plugged or disconnected pressure sensor!", step_start_time = start_time)
                 elif first_peak <= minimum_acceptable_peak_pressure:
-                    return ValveCalibrationResult (test_status = f"Pressure reading is too low!  {first_peak:,.0f} ADC  压力值太低", step_start_time = start_time)
+                    return ValveCalibrationResult (test_status = f"±Pressure reading is too low! [{minimum_acceptable_peak_pressure:,.0f}]: {first_peak:,.0f} ADC", step_start_time = start_time)
                 elif first_peak >= maximum_acceptable_peak_pressure:
-                    return ValveCalibrationResult (test_status = f"Pressure reading is too high! {first_peak:,.0f} ADC  压力值太高", step_start_time = start_time)
+                    return ValveCalibrationResult (test_status = f"±Pressure reading is too high! [{minimum_acceptable_peak_pressure:,.0f}]: {first_peak:,.0f} ADC", step_start_time = start_time)
                 elif first_peak - second_peak > self.MaxPeakDifference:
-                    return ValveCalibrationResult (test_status = f"First and second peak pressures are too different! {(first_peak - second_peak):,.0f} ADC  压力值太高", step_start_time = start_time)
+                    return ValveCalibrationResult (test_status = f"±First and second peak pressures are too different! [{self.MaxPeakDifference}]: {(first_peak - second_peak):,.0f} ADC", step_start_time = start_time)
                 PositionDifference = abs(abs(main2peaks_position[0] - main2peaks_position[1]) - 18000)
                 if PositionDifference > self.MaxAngleDifference:
-                    return ValveCalibrationResult (test_status = f"First and second peak angles are not 180°±{self.MaxAngleDifference/100} apart! {abs(main2peaks_position[0] - main2peaks_position[1])/100:.1f}  压力值太高", step_start_time = start_time)
+                    return ValveCalibrationResult (test_status = f"First and second peak angles are not 180°±{self.MaxAngleDifference/100} apart! {abs(main2peaks_position[0] - main2peaks_position[1])/100:.1f}", step_start_time = start_time)
         else:
-            return ValveCalibrationResult (test_status = "No peaks found in data!  无法找到峰值", step_start_time = start_time)
+            return ValveCalibrationResult (test_status = "±No peaks found in data!", step_start_time = start_time)
         
         if "-v3" not in peripherals_list.DUTsprinkler.Firmware:
             if peripherals_list.DUTsprinkler.ValveCurrentAve > self.MAXVMotorCurrent or peripherals_list.DUTsprinkler.ValveCurrentAve < self.MINVMotorCurrent:
-                return ValveCalibrationResult (test_status = f"Valve motor current is not in range! {self.MINVMotorCurrent}-{self.MAXVMotorCurrent}mA\n阀门电机电流不在范围内!", step_start_time = start_time)            
+                return ValveCalibrationResult (test_status = f"±Valve motor current is not in range! [{self.MINVMotorCurrent}-{self.MAXVMotorCurrent}]: {peripherals_list.DUTsprinkler.ValveCurrentAve} mA", step_start_time = start_time)            
             if peripherals_list.DUTsprinkler.ValveCurrentSTD > self.MAXVMotorCurrentSTD or peripherals_list.DUTsprinkler.ValveCurrentSTD < self.MINVMotorCurrentSTD:
-                return ValveCalibrationResult (test_status = f"Valve motor current variation too large! {self.MINVMotorCurrentSTD}-{self.MAXVMotorCurrentSTD}mA\n阀门电机电流变化过大!", step_start_time = start_time)            
+                return ValveCalibrationResult (test_status = f"±Valve motor current variation too large! [{self.MINVMotorCurrentSTD}-{self.MAXVMotorCurrentSTD}]: {peripherals_list.DUTsprinkler.ValveCurrentSTD} mA", step_start_time = start_time)            
 
         try:
             saved_MLB = int(peripherals_list.DUTMLB.get_valve_home_centidegrees().number) #this is abs
         except peripherals_list.DUTsprinkler.NoNVSException:
-            saved_MLB = 0
+            saved_MLB = None
         except Exception as e:
             return ValveCalibrationResult (test_status = str(e), step_start_time = start_time)
         calculated_offset = peripherals_list.DUTsprinkler.valveOffset # this is relative
@@ -1461,21 +1519,17 @@ class ValveCalibration(TestStep):
         ValvePeak1 = int(first_peak)
         ValvePeak2 = int(second_peak)
         self.parent.text_console_logger(f"Absolute Peak 1: {Peak1Angle}°, {ValvePeak1:,} ADC, Peak 2: {Peak2Angle}°, {ValvePeak2:,} ADC")
-        if self.reset:
-            peripherals_list.DUTMLB.set_valve_home_centidegrees(int(valve_Offset)) # we write the absolute value back to the MLB
-            peripherals_list.DUTsprinkler.valveOffset = int(valve_Offset)
-            peripherals_list.DUTsprinkler.valveFullyOpen = int(absolute_fully_open)
-            peripherals_list.DUTsprinkler.Peak1Angle = Peak1Angle
-            peripherals_list.DUTsprinkler.Peak2Angle = Peak2Angle
-            peripherals_list.DUTsprinkler.ValvePeak1 = ValvePeak1
-            peripherals_list.DUTsprinkler.ValvePeak2 = ValvePeak2
-            self.parent.text_console_logger(f"Absolute Valve Closed: {valve_Offset/100}°, Open: {absolute_fully_open/100}°")
-            fw_ValveOffset = int(peripherals_list.DUTMLB.get_valve_home_centidegrees().number)
-            memory_ValveOffset = peripherals_list.DUTsprinkler.valveOffset
-            if fw_ValveOffset != memory_ValveOffset:
-                return ValveCalibrationResult (test_status = f"OtO's saved valve position {fw_ValveOffset/100}° does not match computer value {memory_ValveOffset/100}°.", step_start_time = start_time)
+        peripherals_list.DUTsprinkler.valveOffset = int(valve_Offset)
+        peripherals_list.DUTsprinkler.valveFullyOpen = int(absolute_fully_open)
+        peripherals_list.DUTsprinkler.Peak1Angle = Peak1Angle
+        peripherals_list.DUTsprinkler.Peak2Angle = Peak2Angle
+        peripherals_list.DUTsprinkler.ValvePeak1 = ValvePeak1
+        peripherals_list.DUTsprinkler.ValvePeak2 = ValvePeak2
+        self.parent.text_console_logger(f"Absolute Valve Closed: {valve_Offset/100}°, Open: {absolute_fully_open/100}°")
+        if saved_MLB != None:
+            self.parent.text_console_logger(f"Valve angle difference from current unit value: {(valve_Offset - saved_MLB)/100}°")
         else:
-            self.parent.text_console_logger(f"Absolute difference: {(valve_Offset - saved_MLB)/100}°")
+            self.parent.text_console_logger(f"Unit doesn't have a closed valve position in memory!")
         return ValveCalibrationResult (test_status = None, step_start_time = start_time)
 
 class ValveCalibrationResult(TestResult):
@@ -1483,15 +1537,16 @@ class ValveCalibrationResult(TestResult):
         super().__init__(test_status, step_start_time)
 
 class VerifyValveOffsetTarget(TestStep): 
+    "Check that no air leaks past the valve when closed"
 
-    ERROR: Dict[str,str] = {"Pressure_Sensor": "OtO's pressure sensor isn't recognized.  洒水器的压力传感器无法识别",
-                        "NonZeroPressure": "OtO's valve is leaking when closed.  洒水器阀门关闭时仍漏气",
-                        "NotFullyClosed": "Unable to close OtO's valve.  无法关闭洒水器阀门",
-                        "Empty List": "OtO did not return pressure information.  洒水器未反馈压力数据",
-                        "Timeout": "Valve didn't reach target in time.  阀门无法及时转到目标位置"}
-    VALVE_TARGET_TOLERANCE: int = 25  # in centidegree
-    Zero_P_Collection_time = 3
-    REPEAT_TEST = 1
+    ERROR: Dict[str,str] = {"Pressure_Sensor": "±OtO's pressure sensor isn't recognized.",
+                        "NonZeroPressure": "±OtO's valve is leaking when closed.",
+                        "NotFullyClosed": "±Unable to close OtO's valve.",
+                        "Empty List": "±OtO did not return pressure information.",
+                        "Timeout": "±Valve didn't reach target in time."}
+    
+    VALVE_TARGET_TOLERANCE: int = 10  # in centidegree
+    Zero_P_Collection_time = 2.1
 
     # Use "Hard Coded" or "Test Calibration" for fixed characters or using the calibration test outputs respectively! 
     def __init__(self, name: str, parent: tk, method:str = "Test Calibration"):
@@ -1501,29 +1556,17 @@ class VerifyValveOffsetTarget(TestStep):
     def run_step(self, peripherals_list: TestPeripherals):  
         startTime = timeit.default_timer()
         pressure_sensor_check = int(peripherals_list.DUTMLB.get_pressure_sensor_version().pressure_sensor_version)
-        if socket.gethostname() not in KK_LAPTOP_LIST:
-            pressure_sensor_check = peripherals_list.DUTMLB.get_pressure_sensor_version().pressure_sensor_version
-            if pressure_sensor_check == peripherals_list.DUTsprinkler.psig15:
-                self.PRESSURE_ADC_TOLERANCE = 530  # ± this amount, based on 800 pcs data Jan 2023
-                self.STD_LOWER_LIMIT_TO_MEAN = 107.8  # based on 800 pcs data Jan 2023
-                self.STD_UPPER_LIMIT_TO_MEAN = 104.2
-            elif pressure_sensor_check == peripherals_list.DUTsprinkler.psig30:
-                self.PRESSURE_ADC_TOLERANCE = 325  # ± this amount, based on 1,089 pcs data Jan 2024
-                self.STD_LOWER_LIMIT_TO_MEAN = 50  # based on 44 pcs data Jan 2023, loose limit for update after a few days of production.
-                self.STD_UPPER_LIMIT_TO_MEAN = 50
-            else:
-                return VerifyValveOffsetTargetResult(test_status=self.ERRORS.get("Pressure_Sensor"),step_start_time=startTime, Valve_Target=False,pressureReading=None,Relative_valveOffset=0, Actual_Valve_Position=0)
-        else: # unit is at the RMA location
-            if pressure_sensor_check == peripherals_list.DUTsprinkler.psig15:
-                self.PRESSURE_ADC_TOLERANCE = 65940 # 2023/09/04 3 STD AT KK
-                self.STD_LOWER_LIMIT_TO_MEAN = 308 # 2023/09/04 3 STD AT KK
-                self.STD_UPPER_LIMIT_TO_MEAN = 308 # 2023/09/04 3 STD AT KK
-            elif pressure_sensor_check == peripherals_list.DUTsprinkler.psig30:
-                self.PRESSURE_ADC_TOLERANCE = 60562 # 2023/09/04 3 STD AT KK
-                self.STD_LOWER_LIMIT_TO_MEAN = 464 # 2023/09/04 3 STD AT KK
-                self.STD_UPPER_LIMIT_TO_MEAN = 464 # 2023/09/04 3 STD AT KK
-            else:
-                return VerifyValveOffsetTargetResult(test_status=self.ERRORS.get("Pressure_Sensor"),step_start_time=startTime, Valve_Target=False,pressureReading=None,Relative_valveOffset=0, Actual_Valve_Position=0)
+        pressure_sensor_check = peripherals_list.DUTMLB.get_pressure_sensor_version().pressure_sensor_version
+        if pressure_sensor_check == peripherals_list.DUTsprinkler.psig15:
+            self.PRESSURE_ADC_TOLERANCE = 530  # ± this amount, based on 800 pcs data Jan 2023
+            self.STD_LOWER_LIMIT_TO_MEAN = 107.8  # based on 800 pcs data Jan 2023
+            self.STD_UPPER_LIMIT_TO_MEAN = 104.2
+        elif pressure_sensor_check == peripherals_list.DUTsprinkler.psig30:
+            self.PRESSURE_ADC_TOLERANCE = 325  # ± this amount, based on 1,089 pcs data Jan 2024
+            self.STD_LOWER_LIMIT_TO_MEAN = 50  # based on 44 pcs data Jan 2023, loose limit for update after a few days of production.
+            self.STD_UPPER_LIMIT_TO_MEAN = 50
+        else:
+            return VerifyValveOffsetTargetResult(test_status = self.ERRORS.get("Pressure_Sensor"), step_start_time=startTime, Valve_Target = False, pressureReading = None, Relative_valveOffset = 0, Actual_Valve_Position = 0)
 
         if not hasattr(peripherals_list, "gpioSuite"): # if called by itself by one button press
             new_gpio = GpioSuite()
@@ -1552,98 +1595,69 @@ class VerifyValveOffsetTarget(TestStep):
                 multiple_STD = peripherals_list.DUTsprinkler.ZeroPressure[2]
 
         peripherals_list.DUTMLB.use_moving_average_filter(True)
-        while run_counter < self.REPEAT_TEST:
-            run_counter += 1
 
-            if run_counter == 2:
-                valveTarget = 18000
+        try: # Closing the valve
+            ReturnMessage = peripherals_list.DUTMLB.set_valve_position(valve_position_centideg = valveTarget, wait_for_complete = True)
+        except TimeoutError:
+            return VerifyValveOffsetTargetResult(test_status = self.ERRORS.get("Timeout"), step_start_time = startTime, Valve_Target = False, pressureReading = pressure_reading, Relative_valveOffset = valveTarget, Actual_Valve_Position = valve_position)
+        except Exception as e:
+            return VerifyValveOffsetTargetResult(test_status = str(e), step_start_time = startTime, Valve_Target = False, pressureReading = pressure_reading, Relative_valveOffset = valveTarget, Actual_Valve_Position = valve_position)
 
-            try: # Closing the valve
-                ReturnMessage = peripherals_list.DUTMLB.set_valve_position(valve_position_centideg = valveTarget, wait_for_complete = True)
-            except TimeoutError:
-                return VerifyValveOffsetTargetResult(test_status=self.ERRORS.get("Timeout"), step_start_time=startTime, Valve_Target=False, pressureReading=pressure_reading, Relative_valveOffset=valveTarget, Actual_Valve_Position=valve_position)
-            except Exception as e:
-                return VerifyValveOffsetTargetResult(test_status=str(e), step_start_time=startTime, Valve_Target=False, pressureReading=pressure_reading, Relative_valveOffset=valveTarget, Actual_Valve_Position=valve_position)
+        valve_position = int(peripherals_list.DUTMLB.get_sensors().valve_position_centideg)
 
-            sensor_reading = peripherals_list.DUTMLB.get_sensors()
-            valve_position = int(sensor_reading.valve_position_centideg)
+        if ReturnMessage.message_type_string != "CTRL_OUT_COMMAND_COMPLETE":
+            return VerifyValveOffsetTargetResult(test_status = self.ERRORS.get("Timeout"), step_start_time = startTime, Valve_Target = False, pressureReading = pressure_reading, Relative_valveOffset = valveTarget, Actual_Valve_Position = valve_position)
+        else:
+            peripherals_list.gpioSuite.airSolenoidPin.set(0) # turn on air
+        
+        peripherals_list.DUTMLB.set_sensor_subscribe(subscribe_frequency = peripherals_list.DUTsprinkler.SubscribeFrequency)
+        time.sleep(0.3)
+        peripherals_list.DUTMLB.clear_incoming_packet_log()
+        data_reading_loop_startTime = time.perf_counter()
+        while time.perf_counter() - data_reading_loop_startTime <= self.Zero_P_Collection_time:
+            sensor_read_list.extend(peripherals_list.DUTMLB.read_all_sensor_packets(limit = None, consume = True))
+        peripherals_list.gpioSuite.airSolenoidPin.set(1) # turn off air
+        peripherals_list.DUTMLB.set_sensor_subscribe(subscribe_frequency = peripherals_list.DUTsprinkler.SubscribeOff)
+        peripherals_list.DUTMLB.clear_incoming_packet_log()
 
-            if ReturnMessage.message_type_string != "CTRL_OUT_COMMAND_COMPLETE":
-                return VerifyValveOffsetTargetResult(test_status=self.ERRORS.get("Timeout"), step_start_time=startTime, Valve_Target=False, pressureReading=pressure_reading, Relative_valveOffset=valveTarget, Actual_Valve_Position=valve_position)
+        if not sensor_read_list:
+            return VerifyValveOffsetTargetResult(test_status = self.ERRORS.get("Empty List"), step_start_time = startTime, Valve_Target = False, pressureReading = pressure_reading, Relative_valveOffset = valveTarget, Actual_Valve_Position = valve_position)
+        
+        for dataCount, dataset in enumerate(sensor_read_list):
+            pressure_data_list.append([int(dataset.time_ms) , int(dataset.pressure_adc)])
+            pressure_data.append(int(dataset.pressure_adc))
+
+        pressure_reading = round(float(np.mean(pressure_data)), 0)
+        STD_pressure_reading = round(float(np.std(pressure_data)), 1)
+        peripherals_list.DUTsprinkler.valveClosesAve = pressure_reading
+        peripherals_list.DUTsprinkler.valveClosesSTD = STD_pressure_reading
+
+        UnitName = peripherals_list.DUTsprinkler.deviceID
+        bom_Number = peripherals_list.DUTsprinkler.bomNumber
+        setting_n_output = ([f"Checking closed pressure", f"Unit ID: {UnitName}", f"Trial: {run_counter}",f"Mean: {pressure_reading}", 
+                            f"STD: {STD_pressure_reading}", f"Data points: {dataCount+1}" , f"BOM: {bom_Number}"])
+
+        setting_n_output = pd.DataFrame(setting_n_output)
+        Data = pd.DataFrame(pressure_data_list)
+        Data = Data.merge(setting_n_output, suffixes=['_left', '_right'], left_index = True, right_index = True, how = 'outer')
+        Data.columns = ["Timestamp" , "Pressure Reading" , "More info"]
+        Date_Time = str(datetime.now().strftime("%d-%m-%Y %H_%M_%S"))
+
+        self.parent.create_plot(window = self.parent.GraphHolder, plottype = "histplot", xaxis = pressure_data, yaxis = None, size = None, name = "Closed Valve Zero", clear = False)
+
+        if UnitName != "":
+            file_name = EstablishLoggingLocation(name = "Verify valve position", folder_name = "Closed", date_time = Date_Time, parent = self.parent).run_step(peripherals_list=peripherals_list).file_path
+            Data.to_csv(file_name, encoding = "utf-8")
+
+        if valve_position > 18000:
+            valve_position = abs(36000 - valve_position)
+        if valve_position <= (valveTarget + self.VALVE_TARGET_TOLERANCE):
+            if (pressure_reading <= zero_P_ADC + self.PRESSURE_ADC_TOLERANCE) and (pressure_reading >= zero_P_ADC - self.PRESSURE_ADC_TOLERANCE) and (STD_pressure_reading <= zeroTolerance/multiple_STD + self.STD_UPPER_LIMIT_TO_MEAN) and (STD_pressure_reading >= zeroTolerance/multiple_STD - self.STD_LOWER_LIMIT_TO_MEAN):
+                return VerifyValveOffsetTargetResult(test_status = f"±Closed Valve Pressure: {pressure_reading:,} ADC, STD {STD_pressure_reading:,}", step_start_time = startTime, Valve_Target = True, pressureReading = pressure_reading, Relative_valveOffset = valveTarget, Actual_Valve_Position = valve_position)
             else:
-                peripherals_list.gpioSuite.airSolenoidPin.set(0) # turn on air
-            
-            peripherals_list.DUTMLB.set_sensor_subscribe(subscribe_frequency = peripherals_list.DUTsprinkler.SubscribeFrequency)
-            time.sleep(0.3)
-            peripherals_list.DUTMLB.clear_incoming_packet_log()
-            data_reading_loop_startTime = time.perf_counter()
-            while time.perf_counter() - data_reading_loop_startTime <= self.Zero_P_Collection_time:
-                sensor_read_list.extend(peripherals_list.DUTMLB.read_all_sensor_packets(limit = None, consume = True))
-            peripherals_list.gpioSuite.airSolenoidPin.set(1) # turn off air
-            peripherals_list.DUTMLB.set_sensor_subscribe(subscribe_frequency = peripherals_list.DUTsprinkler.SubscribeOff)
-            peripherals_list.DUTMLB.clear_incoming_packet_log()
-
-            if not sensor_read_list:
-                return VerifyValveOffsetTargetResult(test_status = self.ERRORS.get("Empty List"), step_start_time = startTime, Valve_Target = False, pressureReading = pressure_reading, Relative_valveOffset=valveTarget,Actual_Valve_Position=valve_position)
-            
-            for dataCount, dataset in enumerate(sensor_read_list):
-                pressure_data_list.append([int(dataset.time_ms) , int(dataset.pressure_adc)])
-                pressure_data.append(int(dataset.pressure_adc))
-
-            pressure_reading = round(float(np.mean(pressure_data)), 0)
-            STD_pressure_reading = round(float(np.std(pressure_data)), 1)
-            peripherals_list.DUTsprinkler.valveClosesAve = pressure_reading
-            peripherals_list.DUTsprinkler.valveClosesSTD = STD_pressure_reading
-
-            UnitName = peripherals_list.DUTsprinkler.deviceID
-            bom_Number = peripherals_list.DUTsprinkler.bomNumber
-            setting_n_output = ([f"Checking closed pressure", f"Unit ID: {UnitName}", f"Trial: {run_counter}",f"Mean: {pressure_reading}", 
-                                f"STD: {STD_pressure_reading}", f"Data points: {dataCount+1}" , f"BOM: {bom_Number}"])
-
-            setting_n_output = pd.DataFrame(setting_n_output)
-            Data = pd.DataFrame(pressure_data_list)
-            Data = Data.merge(setting_n_output, suffixes=['_left', '_right'], left_index = True, right_index = True, how = 'outer')
-            Data.columns = ["Timestamp" , "Pressure Reading" , "More info"]
-            Date_Time = str(datetime.now().strftime("%d-%m-%Y %H_%M_%S"))
-
-            self.parent.create_plot(window = self.parent.GraphHolder, plottype = "histplot", xaxis = pressure_data, yaxis = None, size = None, name = "Closed Valve Zero 验证阀门关闭", clear = False)
-
-            if UnitName != "":
-                file_name = EstablishLoggingLocation(name = "Verify valve position", folder_name = "Closed", date_time = Date_Time, parent = self.parent).run_step(peripherals_list=peripherals_list).file_path
-                Data.to_csv(file_name, encoding = "utf-8")
-
-            if valve_position > 18000:
-                valve_position = abs(36000 - valve_position)
-            if valve_position <= (valveTarget + self.VALVE_TARGET_TOLERANCE):
-                if (pressure_reading <= zero_P_ADC + self.PRESSURE_ADC_TOLERANCE) and (pressure_reading >= zero_P_ADC - self.PRESSURE_ADC_TOLERANCE) and \
-                    (STD_pressure_reading <= zeroTolerance/multiple_STD + self.STD_UPPER_LIMIT_TO_MEAN) and \
-                    (STD_pressure_reading >= zeroTolerance/multiple_STD - self.STD_LOWER_LIMIT_TO_MEAN):
-                    if run_counter == 2:
-                        peripherals_list.DUTsprinkler.valveOffset = valveTarget
-                        saved_MLB = int(peripherals_list.DUTMLB.get_valve_home_centidegrees().number) #this is abs
-                        valve_Offset = (saved_MLB + valveTarget) % 36000 # this makes it absolute
-                        absolute_fully_open = (int(valve_Offset) + 9000) % 36000
-                        peripherals_list.DUTMLB.set_valve_home_centidegrees(int(valve_Offset)) # we write the absolute value back to the MLB
-                        peripherals_list.DUTsprinkler.valveOffset = int(valve_Offset)
-                        peripherals_list.DUTsprinkler.valveFullyOpen = int(absolute_fully_open)
-                        self.parent.text_console_logger(f"Absolute Valve Closed: {valve_Offset/100}°, Open: {absolute_fully_open/100}°")
-                        fw_ValveOffset = int(peripherals_list.DUTMLB.get_valve_home_centidegrees().number)
-                        memory_ValveOffset = peripherals_list.DUTsprinkler.valveOffset
-                        if fw_ValveOffset != memory_ValveOffset:
-                            return VerifyValveOffsetTargetResult(test_status = f"OtO's saved valve position {fw_ValveOffset/100}° does not match computer value {memory_ValveOffset/100}°.\n洒水器保存的喷嘴位置与电脑规定值不符", step_start_time = startTime, Valve_Target=True,
-                                                        pressureReading=pressure_reading,
-                                                        Relative_valveOffset=valveTarget,
-                                                        Actual_Valve_Position=valve_position)
-                    return VerifyValveOffsetTargetResult(test_status = f"±Closed Valve Pressure  关闭的阀门的压力: {pressure_reading:,} ADC, STD {STD_pressure_reading:,}", step_start_time=startTime, Valve_Target=True,
-                                                        pressureReading=pressure_reading,
-                                                        Relative_valveOffset=valveTarget,
-                                                        Actual_Valve_Position=valve_position)
-                else:
-                    if run_counter >= self.REPEAT_TEST:
-                        return VerifyValveOffsetTargetResult(test_status=self.ERROR.get("NonZeroPressure") + f"\nPressure: {pressure_reading:,} ADC, STD {STD_pressure_reading:,} Valve Error: {round((valveTarget - valve_position)/100, 2)}°", step_start_time=startTime, Valve_Target=False, pressureReading=pressure_reading, Relative_valveOffset=valveTarget, Actual_Valve_Position=valve_position)
-            else:
-                if run_counter != 1:
-                    return VerifyValveOffsetTargetResult(test_status=self.ERRORS.get("NotFullyClosed") + f"Offset: {valveTarget/100}°±{self.VALVE_TARGET_TOLERANCE/100}° ; Reading {valve_position/100}°", pressureReading = pressure_reading, Relative_valveOffset = valveTarget, Actual_Valve_Position = valve_position)
+                return VerifyValveOffsetTargetResult(test_status=self.ERROR.get("NonZeroPressure") + f"\nPressure: {pressure_reading:,} ADC, STD {STD_pressure_reading:,} Valve Error: {round((valveTarget - valve_position)/100, 2)}°", step_start_time=startTime, Valve_Target=False, pressureReading = pressure_reading, Relative_valveOffset = valveTarget, Actual_Valve_Position = valve_position)
+        else:
+            return VerifyValveOffsetTargetResult(test_status=self.ERRORS.get("NotFullyClosed") + f"Offset: {valveTarget/100}°±{self.VALVE_TARGET_TOLERANCE/100}° ; Reading {valve_position/100}°", pressureReading = pressure_reading, Relative_valveOffset = valveTarget, Actual_Valve_Position = valve_position)
 
 class VerifyValveOffsetTargetResult(TestResult):
 

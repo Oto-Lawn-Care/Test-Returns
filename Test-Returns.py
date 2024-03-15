@@ -191,7 +191,7 @@ class MainWindow(tk.Tk):
             self.log_file_directory = (pathlib.Path(self.log_file_directory) /  test_folder)
             filename = "-TestProductionData" + str(time.strftime("%y", time.localtime())) + format(datetime.datetime.now().isocalendar()[1],"02d") + ".csv"
         else: 
-            filename = "ProductionData" + str(time.strftime("%y", time.localtime())) + format(datetime.datetime.now().isocalendar()[1],"02d") + ".csv"
+            filename = "ReturnsData.csv"
         self.csv_file_name = (pathlib.Path(self.log_file_directory)/(str(self.test_suite.test_devices.DUTsprinkler.testFixtureName) + filename ))
 
     def execute_tests(self):

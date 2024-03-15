@@ -8,10 +8,12 @@ class otoSprinkler:
     '''
     def __init__(self):
         self.deviceID: str = ""  # OtO serial number, format "oto1234567"
-        self.macAddress = ""  # MAC address of the wifi of the ESP32
+        self.macAddress: str = ""  # MAC address of the wifi of the ESP32
+        self.UID: str = ""  # UID of unit
+        self.SSID: str = ""  # SSID of wifi
         self.bomNumber: str = ""  # BOM number of OtO design, set manually at flash time, examples: 6014-G, 6014-F1
         self.Firmware: str = ""  # firmware revision of OtO board
-        self.batchNumber: str = time.strftime("%y", time.localtime())[1] + time.strftime("%j", time.localtime())  # format is YDDD, where Y is last digit of the year, and DDD is the day of the year of the current day
+        self.batchNumber = str(time.strftime("%y", time.localtime())[1] + time.strftime("%j", time.localtime()))  # format is YDDD, where Y is last digit of the year, and DDD is the day of the year of the current day
 
         self.batteryVoltage: float = 0
 
