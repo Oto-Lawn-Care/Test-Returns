@@ -659,7 +659,7 @@ class NozzleRotationTestWithSubscribe(TestStep):
         RotationalSpeed = list(map(lambda v: v/100, RotationalSpeed))
         RotationalPosition = Data["Nozzle Position"]
         RotationalPosition = list(map(lambda a: -a/18000*np.pi, RotationalPosition))
-        self.parent.create_plot(window = self.parent.GraphHolder, plottype = "polar", xaxis = RotationalPosition, yaxis = RotationalSpeed, size = None, name = "Nozzle Rotation 喷嘴旋转测试", clear = True)
+        self.parent.create_plot(window = self.parent.GraphHolder, plottype = "polar", xaxis = RotationalPosition, yaxis = RotationalSpeed, size = None, name = "Nozzle Rotation", clear = True)
 
         Date_Time = str(datetime.now().strftime("%d-%m-%Y %H_%M_%S"))
         if peripherals_list.DUTsprinkler.deviceID != "":
@@ -928,8 +928,10 @@ class TestExternalPower(TestStep):
     PASS_CURRENTv4 = 0.37  # Based on "calibrated" current results
     MAX_CURRENTv4 =  0.43  # Based on "calibrated" current results
     ERRORS: Dict[str, str] = {
-        "Current Below": "±External charging current BELOW limit.",
-        "Current Above": "±External charging current ABOVE limit."
+        "Current Below": "±External charging current BELOW limit ",
+        "Current Above": "±External charging current ABOVE limit ",
+        "Voltaget Below": "±External charging voltage BELOW limit ",
+        "Voltage Above": "±External charging voltage ABOVE limit "
         }
 
     def run_step(self, peripherals_list: TestPeripherals):
@@ -991,16 +993,16 @@ class TestExternalPower(TestStep):
             if self.PASS_CURRENTv4 <= chargingCurrent <= self.MAX_CURRENTv4:
                 return TestExternalPowerResult(test_status = f"±Charging: {chargingCurrent}A" , step_start_time = startTime, pass_criteria = (self.PASS_VOLTAGE, self.PASS_CURRENTv4), actual_readings = (chargingVoltage, chargingCurrent))
             elif chargingCurrent < self.PASS_CURRENTv4:
-                return TestExternalPowerResult(test_status = self.ERRORS.get("Current Below") + f"({self.PASS_CURRENTv4}A), {chargingCurrent}A", step_start_time = startTime, pass_criteria = (self.PASS_VOLTAGE, self.PASS_CURRENTv4), actual_readings = (chargingVoltage, chargingCurrent))
+                return TestExternalPowerResult(test_status = self.ERRORS.get("Current Below") + f"[{self.PASS_CURRENTv4}A]: {chargingCurrent}A", step_start_time = startTime, pass_criteria = (self.PASS_VOLTAGE, self.PASS_CURRENTv4), actual_readings = (chargingVoltage, chargingCurrent))
             elif chargingCurrent > self.MAX_CURRENTv4:
-                return TestExternalPowerResult(test_status = self.ERRORS.get("Current Above") + f"({self.MAX_CURRENTv4}A), {chargingCurrent}A", step_start_time = startTime, pass_criteria = (self.PASS_VOLTAGE, self.PASS_CURRENTv4), actual_readings = (chargingVoltage, chargingCurrent))
+                return TestExternalPowerResult(test_status = self.ERRORS.get("Current Above") + f"[{self.MAX_CURRENTv4}A]: {chargingCurrent}A", step_start_time = startTime, pass_criteria = (self.PASS_VOLTAGE, self.PASS_CURRENTv4), actual_readings = (chargingVoltage, chargingCurrent))
         else:
-            if self.PASS_CURRENT <= chargingCurrent <= self.MAX_CURRENT:
+            if self.PASS_VOLTAGE <= chargingVoltage <= self.MAX_VOLTAGE:
                 return TestExternalPowerResult(test_status = f"±Charging: {chargingCurrent}A, {chargingVoltage}V" , step_start_time = startTime, pass_criteria = (self.PASS_VOLTAGE, self.PASS_CURRENTv4), actual_readings = (chargingVoltage, chargingCurrent))
-            elif chargingCurrent < self.PASS_CURRENT:
-                return TestExternalPowerResult(test_status = self.ERRORS.get("Current Below") + f"({self.PASS_CURRENT}A), {chargingCurrent}A, {chargingVoltage}V", step_start_time = startTime, pass_criteria = (self.PASS_VOLTAGE, self.PASS_CURRENTv4), actual_readings = (chargingVoltage, chargingCurrent))
-            elif chargingCurrent > self.MAX_CURRENT:
-                return TestExternalPowerResult(test_status = self.ERRORS.get("Current Above") + f"({self.MAX_CURRENT}A), {chargingCurrent}A, {chargingVoltage}V", step_start_time = startTime, pass_criteria = (self.PASS_VOLTAGE, self.PASS_CURRENTv4), actual_readings = (chargingVoltage, chargingCurrent))
+            elif chargingVoltage < self.PASS_VOLTAGE:
+                return TestExternalPowerResult(test_status = self.ERRORS.get("Voltage Below") + f"[{self.PASS_VOLTAGE}A]: {chargingVoltage}V", step_start_time = startTime, pass_criteria = (self.PASS_VOLTAGE, self.PASS_CURRENTv4), actual_readings = (chargingVoltage, chargingCurrent))
+            elif chargingVoltage > self.MAX_VOLTAGE:
+                return TestExternalPowerResult(test_status = self.ERRORS.get("Voltage Above") + f"[{self.MAX_VOLTAGE}A]: {chargingVoltage}V", step_start_time = startTime, pass_criteria = (self.PASS_VOLTAGE, self.PASS_CURRENTv4), actual_readings = (chargingVoltage, chargingCurrent))
 
 class TestExternalPowerResult(TestResult):
     def __init__(self, actual_readings: tuple[float,float], pass_criteria: tuple[float,float], test_status, step_start_time):
@@ -1062,7 +1064,7 @@ class TestMoesFullyOpen(TestStep):
             Span = peripherals_list.DUTsprinkler.valveFullyOpen1Ave - peripherals_list.DUTsprinkler.valveFullyOpen3Ave
             SigmaSpan = abs(peripherals_list.DUTsprinkler.valveFullyOpen1STD - peripherals_list.DUTsprinkler.valveFullyOpen3STD)
             if abs(Span) < SpanTolerance and SigmaSpan < SigmaSpanTolerance:
-                ReturnMessage = peripherals_list.DUTMLB.set_valve_position(wait_for_complete = False, valve_position_centideg = 0)
+                ReturnMessage = peripherals_list.DUTMLB.set_valve_position(wait_for_complete = False, valve_position_centideg = 11000)
                 return TestMoesFullyOpenResult(test_status = None, step_start_time = startTime)
             else:
                 try:
@@ -1080,16 +1082,16 @@ class TestMoesFullyOpen(TestStep):
                     DeltaAngle = 36000 + DeltaAngle
                 valve_Offset = (DeltaAngle + saved_MLB) % 36000 # this makes it absolute
                 absolute_fully_open = (valve_Offset + 9000) % 36000
-                peripherals_list.DUTMLB.set_valve_home_centidegrees(int(valve_Offset)) # we write the absolute value back to the MLB
+                # peripherals_list.DUTMLB.set_valve_home_centidegrees(int(valve_Offset)) # we write the absolute value back to the MLB
                 peripherals_list.DUTsprinkler.valveOffset = int(valve_Offset)
                 peripherals_list.DUTsprinkler.valveFullyOpen = int(absolute_fully_open)
                 self.parent.text_console_logger(f"Revised Absolute Valve Closed: {valve_Offset/100}°, Open: {absolute_fully_open/100}°, {DeltaAngle/100}")
                 fw_ValveOffset = int(peripherals_list.DUTMLB.get_valve_home_centidegrees().number)
                 memory_ValveOffset = peripherals_list.DUTsprinkler.valveOffset
                 if fw_ValveOffset != memory_ValveOffset:
-                    return TestMoesFullyOpenResult(test_status = f"OtO's saved valve position {fw_ValveOffset/100}° does not match computer value {memory_ValveOffset/100}°.", step_start_time = startTime)
+                    return TestMoesFullyOpenResult(test_status = f"±OtO's saved valve position {fw_ValveOffset/100}° does not match computer value {memory_ValveOffset/100}°.", step_start_time = startTime)
                 Repeats += 1
-        ReturnMessage = peripherals_list.DUTMLB.set_valve_closed()
+        ReturnMessage = peripherals_list.DUTMLB.set_valve_position(wait_for_complete = False, valve_position_centideg = 11000)
         return TestMoesFullyOpenResult(test_status = f"±Failed Fully Open Test [{SpanTolerance}, {SigmaSpanTolerance}]: {Span}, {SigmaSpan}", step_start_time = startTime)
         
 class TestMoesFullyOpenResult(TestResult):
@@ -1221,12 +1223,12 @@ class TestSolar(TestStep):
     PASS_CURRENT: float = 40  # update per 141 unit build at Meco Dec 2023
     MAX_CURRENT: float = 345  # update per 141 unit build at Meco Dec 2023
     SI_UNITS: str = "ADC"
-    ERRORS: Dict[str,str] = {"Solar Below": "±Solar panel voltage BELOW limit. ",
-                             "Solar Above": "±Solar panel voltage ABOVE limit. ",
+    ERRORS: Dict[str,str] = {"Solar Below": "Solar panel voltage BELOW limit. ",
+                             "Solar Above": "Solar panel voltage ABOVE limit. ",
                              "No Voltage": "No solar panel voltage was read from the OtO.",
-                             "Solar BelowC": "±Solar panel current BELOW limit. ",
-                             "Solar AboveC": "±Solar panel current ABOVE limit. ",
-                             "No Current": "±No solar panel current was read from the OtO."
+                             "Solar BelowC": "±Solar panel current BELOW limit",
+                             "Solar AboveC": "±Solar panel current ABOVE limit",
+                             "No Current": "±No solar panel current was read from the OtO"
                              }
 
     def run_step(self, peripherals_list: TestPeripherals):
@@ -1259,13 +1261,13 @@ class TestSolar(TestStep):
                 TestStatus = self.ERRORS.get("Solar BelowC")+ f"[{self.PASS_CURRENT}]: {solarCurrent}mA, "
             elif solarCurrent == 0:
                 TestStatus = self.ERRORS.get("No Current") + ", "
-            if self.PASS_VOLTAGE <= solarCurrent <= self.MAX_VOLTAGE:
-                TestStatus += f"±{solarVoltage}V"
-            elif solarCurrent >= self.MAX_VOLTAGE:
+            if self.PASS_VOLTAGE <= solarVoltage <= self.MAX_VOLTAGE:
+                TestStatus += f"panel voltage reading: {solarVoltage}V"
+            elif solarVoltage >= self.MAX_VOLTAGE:
                 TestStatus += self.ERRORS.get("Solar Above") + f"[{self.MAX_VOLTAGE}]: {solarVoltage}V"
-            elif solarCurrent < self.PASS_VOLTAGE and solarVoltage != 0:
+            elif solarVoltage < self.PASS_VOLTAGE and solarVoltage != 0:
                 TestStatus += self.ERRORS.get("Solar Below")+ f"[{self.PASS_VOLTAGE}]: {solarVoltage}V"
-            elif solarCurrent == 0:
+            elif solarVoltage == 0:
                 TestStatus += self.ERRORS.get("No Voltage")
             return TestSolarResult(test_status = TestStatus, step_start_time = startTime, pass_criteria = self.PASS_CURRENT, actual_current = solarCurrent, actual_voltage = solarVoltage)
         
@@ -1482,8 +1484,8 @@ class ValveCalibration(TestStep):
             peripherals_list.DUTsprinkler.valveOffset = int(valve_offset)
             peripherals_list.DUTsprinkler.valveFullyOpen = int(fullyOPEN_valve_position)
             self.parent.text_console_logger(f"Relative Valve Closed: {valve_offset/100}°, Open: {fullyOPEN_valve_position/100}°")
-            self.parent.create_plot(window = self.parent.GraphHolder, plottype = "lineplot", xaxis = [fullyOPEN_valve_position], yaxis = [first_peak], size = 80, name = "Valve Calibration 校准阀门", clear = False)
-            self.parent.create_plot(window = self.parent.GraphHolder, plottype = "lineplot", xaxis = [main2peaks_position[1]], yaxis = [second_peak], size = 60, name = "Valve Calibration 校准阀门", clear = True)
+            self.parent.create_plot(window = self.parent.GraphHolder, plottype = "lineplot", xaxis = [fullyOPEN_valve_position], yaxis = [first_peak], size = 80, name = "Valve Calibration", clear = False)
+            self.parent.create_plot(window = self.parent.GraphHolder, plottype = "lineplot", xaxis = [main2peaks_position[1]], yaxis = [second_peak], size = 60, name = "Valve Calibration", clear = True)
             if first_peak != 0:
                 if abs(first_peak - peripherals_list.DUTsprinkler.ZeroPressureAve) < 150000:
                     return ValveCalibrationResult (test_status = "±Possible plugged or disconnected pressure sensor!", step_start_time = start_time)

@@ -34,17 +34,17 @@ class MainWindow(tk.Tk):
     IN_PROCESS_COLOUR = "YELLOW"
     NORMAL_COLOUR = "WHITE"
     SCALEFACTOR = 1  # scale factor is one if there are 1440 vertical pixels on the screen
-    FIGSIZEX = 10.1  # width of chart window for a 1440 vertical pixel screen, to be scaled at the init stage
-    FIGSIZEY = 6.5 # height of chart window, for a 1440 vertical pixel screen, to be scaled at the init stage
+    FIGSIZEX = 14  # width of chart window for a 1440 vertical pixel screen, to be scaled at the init stage
+    FIGSIZEY = 8.5 # height of chart window, for a 1440 vertical pixel screen, to be scaled at the init stage
     DPI = 120  # scale based on monitor dots per inch
     
     def __init__(self):
         tk.Tk.__init__(self)
         self.tk.call("tk", "scaling", 1.33)  # needed to prevent graphs from growing during data updates
-        self.SCALEFACTOR = self.winfo_screenwidth() / 3840  # scaling based on screen size - sized for 3840 x 2160 screen
+        self.SCALEFACTOR = 0.99 * self.winfo_screenwidth() / 3840  # scaling based on screen size - sized for 3840 x 2160 screen
         self.FIGSIZEX = self.FIGSIZEX * self.SCALEFACTOR  # scaled width of chart window
         self.FIGSIZEY = self.FIGSIZEY * self.SCALEFACTOR  # scaled height of chart window
-        sns.set_theme(font = "Microsoft YaHei", font_scale = self.SCALEFACTOR)  # sets the default seaborn chart colours and fonts
+        sns.set_theme(font = "Microsoft YaHei", font_scale = 1.5 * self.SCALEFACTOR)  # sets the default seaborn chart colours and fonts
 
         self.device_list = TestPeripherals()
         self.test_suite = TestSuite(name = f"OtO Unit Return Function Test {self.ProgramVersion}",
