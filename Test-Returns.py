@@ -133,7 +133,7 @@ class MainWindow(tk.Tk):
         for count, steps in enumerate(self.test_suite.test_list):
             column_no = 3 + count // ColumnCount
             row_no = count % ColumnCount
-            setattr(self, steps.name, tk.Button(self, borderwidth = 3, relief = "sunken", text = steps.name, bg = self.NORMAL_COLOUR, font = self.status_font, padx = int(3 * self.SCALEFACTOR), pady = int(3 * self.SCALEFACTOR), width = 24, wraplength = 520 * self.SCALEFACTOR, height = 2, command = lambda x=count : self.OneTestButton(x)))
+            setattr(self, steps.name, tk.Button(self, borderwidth = 3, relief = "sunken", text = steps.name, bg = self.NORMAL_COLOUR, font = self.status_font, padx = int(3 * self.SCALEFACTOR), pady = int(3 * self.SCALEFACTOR), width = 24, wraplength = 500 * self.SCALEFACTOR, height = 2, command = lambda x=count : self.OneTestButton(x)))
             temp = getattr(self, steps.name)
             self.status_labels.append(temp)
             temp.grid(row = row_no, column = column_no, sticky = "EW", padx = int(40 * self.SCALEFACTOR), pady = int(4 * self.SCALEFACTOR))
@@ -228,17 +228,19 @@ class MainWindow(tk.Tk):
 
             #Step 4: Run the test Suite
             index = 0
+            self.test_suite.test_devices.DUTsprinkler.passEOL = True            
             while self.abort_test_bool is False and index < len(self.test_suite.test_list):
                 self.status_labels[index].config(bg = self.IN_PROCESS_COLOUR)
                 self.status_labels[index].update()
                 self.test_result_list.append(self.test_suite.test_list[index].run_step(peripherals_list=self.test_suite.test_devices))
                 if not self.test_result_list[index].is_passed:
+                    self.test_suite.test_devices.DUTsprinkler.passEOL = False
                     self.test_step_failure_handler(step_number = index)
-                    self.test_suite.test_devices.DUTsprinkler.passTime = round((timeit.default_timer() - self.test_start_time), 4)
-                    self.log_unit_data()
-                    self.one_button_to_rule_them_all.configure(text = "START", bg = self.GOOD_COLOUR, fg = self.NORMAL_COLOUR, command = self.execute_tests, state = "normal")
-                    self.turn_valve_button.configure(state = "normal")
-                    return ClosePort(self.device_list)
+                    # self.test_suite.test_devices.DUTsprinkler.passTime = round((timeit.default_timer() - self.test_start_time), 4)
+                    # self.log_unit_data()
+                    # self.one_button_to_rule_them_all.configure(text = "START", bg = self.GOOD_COLOUR, fg = self.NORMAL_COLOUR, command = self.execute_tests, state = "normal")
+                    # self.turn_valve_button.configure(state = "normal")
+                    # return ClosePort(self.device_list)
                 else:
                     self.status_labels[index].configure(bg = self.GOOD_COLOUR)
                     self.status_labels[index].update()
@@ -254,10 +256,12 @@ class MainWindow(tk.Tk):
                 self.turn_valve_button.configure(state = "normal")
                 return ClosePort(self.device_list)
             else:
-                self.test_suite.test_devices.DUTsprinkler.passEOL = True
                 self.test_suite.test_devices.DUTsprinkler.passTime = round((timeit.default_timer() - self.test_start_time), 4)
                 self.log_unit_data()
-                self.text_console_logger("--------------------------  Device PASSED  -------------------------------")
+                if self.test_suite.test_devices.DUTsprinkler.passEOL:
+                    self.text_console_logger("--------------------------  Device PASSED  -------------------------------")
+                else:
+                    self.text_console_logger("--------------------------  Device FAILED  -------------------------------")
 
             # Step 6: Reset Button Status
             self.one_button_to_rule_them_all.configure(text = "START", bg = self.GOOD_COLOUR, fg = self.NORMAL_COLOUR, command = self.execute_tests, state = "normal")
@@ -272,10 +276,7 @@ class MainWindow(tk.Tk):
             elif str(e) == "No Otos found on Serial Ports":
                 self.text_console_logger("No serial card found. Check that the USB communication serial card is plugged in.")
             else:
-                if len(str(e)) > 0:
-                    self.text_console_logger(display_message = str(e))
-                else:
-                    self.text_console_logger(display_message = "UNEXPECTED PROGRAM ERROR!")
+                self.text_console_logger(display_message = str(repr(e)))
             self.one_button_to_rule_them_all.configure(text = "START", bg = self.GOOD_COLOUR, fg = self.NORMAL_COLOUR, command = self.execute_tests, state = "normal")
             self.turn_valve_button.configure(state = "normal")
 
@@ -676,10 +677,10 @@ class MainWindow(tk.Tk):
         self.test_suite.test_devices.DUTsprinkler.errorStepName = type(self.test_result_list[step_number]).__name__
         self.status_labels[step_number].configure(bg = self.BAD_COLOUR)
         self.status_labels[step_number].update()
-        self.text_console.configure(bg = self.BAD_COLOUR)
+        # self.text_console.configure(bg = self.BAD_COLOUR)
         self.text_console_logger(display_message = error_message)
-        self.eol_pcb_init()  # Turns off power, air and LED
-        self.text_console_logger('---------------------------------  DEVICE FAILED  -----------------------------------------')
+        # self.eol_pcb_init()  # Turns off power, air and LED
+        # self.text_console_logger('---------------------------------  DEVICE FAILED  -----------------------------------------')
 
     def text_console_logger(self, display_message: str):
         """function to put text into the consle of the gui"""
