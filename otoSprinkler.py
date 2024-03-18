@@ -90,6 +90,7 @@ class otoSprinkler:
         self.fullyopenbuffer: int = 0
         self.FO_overall_test_counter: int = 1
         self.SubscribeFrequency: int = 0
+        self.SlowerSubscribeFrequency: int = 0
         self.SubscribeOff: int = 0
         self.NoNVSException = None
         self.psig15: int = 0

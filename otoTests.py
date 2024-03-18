@@ -16,7 +16,6 @@ import pathlib
 import numpy as np
 import math
 import tkinter as tk
-import socket
 import json
 import matplotlib
 matplotlib.use('Agg')   # needed to prevent multi-thread failures when using matplotlib
@@ -105,6 +104,7 @@ class TestPeripherals:
                 self.DUTMLB = pyoto.OtoInterface(pyoto.ConnectionType.UART, logger = None)
                 self.DUTMLB.start_connection(port = None, reset_on_connect = True)
             self.DUTsprinkler.SubscribeFrequency = pyoto.SensorSubscribeFrequencyEnum.SENSOR_SUBSCRIBE_FREQUENCY_100Hz
+            self.DUTsprinkler.SlowerSubscribeFrequency = pyoto.SensorSubscribeFrequencyEnum.SENSOR_SUBSCRIBE_FREQUENCY_10Hz
             self.DUTsprinkler.NoNVSException = pyoto.NotInitializedException
             self.DUTsprinkler.psig15 = otoMessageDefs.PressureSensorVersionEnum.MPRL_15_PSI_GAUGE.value
             self.DUTsprinkler.psig30 = otoMessageDefs.PressureSensorVersionEnum.MPRL_30_PSI_GAUGE.value                
@@ -376,9 +376,10 @@ class NozzleRotationTestWithSubscribe(TestStep):
                             "Max_STD" : "Nozzle speed variation was too large.",
                             "Min_STD" : "Nozzle speed variation was unusually small."}
     TIMEOUT = 25 # in sec
-    Nozzle_Duty_Cycle = 30
+    Nozzle_Duty_Cycle = 30  # % of full
     MAXRotationSpeed: int = 3900  # Mar 2410/2411 data
     MINRotationSpeed: int = 2750  # Mar 2410/2411 data
+    Nozzle_Speed = (MAXRotationSpeed + MINRotationSpeed) * 0.5  # centidegrees / sec
     Max_STD = 345  # 2410/11 data
     Min_STD = 50  # 2410/11 data
     MAXNMotorCurrent = 95  # Dec 2023 data at Meco, first 141 units, confirmed with 2k units Jan 2024
@@ -391,7 +392,7 @@ class NozzleRotationTestWithSubscribe(TestStep):
         nozzle_rotation_test_failure_count = 0
         data_collection_status: int = None
 
-        rawdata = self.Collecting_Nozzle_Rotation_Data(peripherals_list)
+        rawdata = self.Collecting_Nozzle_Rotation_Data(peripherals_list = peripherals_list, cycle = "duty")
         # data_collection_status = 0 if all OK, 1 if List is empty, 2 if Timeout, 3 Unknown
         data_collection_status = rawdata.get("Status_Check")
         Nozzle_Rotation_Test_Data = rawdata.get("Collected_Data_List")
@@ -411,14 +412,57 @@ class NozzleRotationTestWithSubscribe(TestStep):
             peripherals_list.DUTsprinkler.nozzleRotationSTD = round(measured_STD/100, 2)
             if "-v3" not in peripherals_list.DUTsprinkler.Firmware:
                 if peripherals_list.DUTsprinkler.NozzleCurrentAve > self.MAXNMotorCurrent or peripherals_list.DUTsprinkler.NozzleCurrentAve < self.MINNMotorCurrent:
-                    return NozzleRotationTestWithSubscribeResult(test_status = f"Nozzle motor current out of range! {self.MINNMotorCurrent}-{self.MAXNMotorCurrent}mA. Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec, motor {peripherals_list.DUTsprinkler.NozzleCurrentAve} mA, STD {peripherals_list.DUTsprinkler.NozzleCurrentSTD} mA",
-                    step_start_time = startTime, Friction_Points = nozzle_rotation_test_failure_count, Nozzle_Rotation_Data = Nozzle_Rotation_Test_Data)
+                    self.parent.text_console_logger(f"Nozzle motor current out of range! {self.MINNMotorCurrent}-{self.MAXNMotorCurrent}mA. Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec, motor {peripherals_list.DUTsprinkler.NozzleCurrentAve} mA, STD {peripherals_list.DUTsprinkler.NozzleCurrentSTD} mA")
                 if peripherals_list.DUTsprinkler.NozzleCurrentSTD > self.MAXNMotorCurrentSTD or peripherals_list.DUTsprinkler.NozzleCurrentSTD < self.MINNMotorCurrentSTD:
-                    return NozzleRotationTestWithSubscribeResult(test_status = f"Nozzle motor current variation too large! {self.MINNMotorCurrent}-{self.MAXNMotorCurrent}mA\nNozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec, motor {peripherals_list.DUTsprinkler.NozzleCurrentAve} mA, STD {peripherals_list.DUTsprinkler.NozzleCurrentSTD} mA",
-                step_start_time = startTime, Friction_Points = nozzle_rotation_test_failure_count, Nozzle_Rotation_Data = Nozzle_Rotation_Test_Data)
+                    self.parent.text_console_logger(f"Nozzle motor current variation too large! {self.MINNMotorCurrent}-{self.MAXNMotorCurrent}mA\nNozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec, motor {peripherals_list.DUTsprinkler.NozzleCurrentAve} mA, STD {peripherals_list.DUTsprinkler.NozzleCurrentSTD} mA")
             if self.MINRotationSpeed <= measured_average_speed <= self.MAXRotationSpeed and nozzle_rotation_test_Max_STD_failure == False and nozzle_rotation_test_Min_STD_failure == False:
-                return NozzleRotationTestWithSubscribeResult(test_status = f"Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec, motor {peripherals_list.DUTsprinkler.NozzleCurrentAve} mA, STD {peripherals_list.DUTsprinkler.NozzleCurrentSTD} mA",
+                return NozzleRotationTestWithSubscribeResult(test_status = f"±Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec, motor {peripherals_list.DUTsprinkler.NozzleCurrentAve} mA, STD {peripherals_list.DUTsprinkler.NozzleCurrentSTD} mA",
                 step_start_time = startTime, Friction_Points = nozzle_rotation_test_failure_count, Nozzle_Rotation_Data = Nozzle_Rotation_Test_Data)
+            elif (measured_average_speed < self.MINRotationSpeed or measured_average_speed > self.MAXRotationSpeed) and nozzle_rotation_test_Max_STD_failure == True:
+                self.parent.text_console_logger(f"Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("Max_STD") + " and...\n " + self.ERRORS.get("Rotation_Rate"))
+            elif (measured_average_speed < self.MINRotationSpeed or measured_average_speed > self.MAXRotationSpeed) and nozzle_rotation_test_Min_STD_failure == True:
+                self.parent.text_console_logger(f"Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("Min_STD") + " and...\n " + self.ERRORS.get("Rotation_Rate"))
+            elif measured_average_speed < self.MINRotationSpeed or measured_average_speed > self.MAXRotationSpeed:
+                self.parent.text_console_logger(f"Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("Rotation_Rate"))
+            elif nozzle_rotation_test_Max_STD_failure == True:
+                self.parent.text_console_logger(f"Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("Max_STD"))
+            elif nozzle_rotation_test_Min_STD_failure == True:
+                self.parent.text_console_logger(f"Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("Min_STD"))
+            else:
+                self.parent.text_console_logger(f"Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("IDK"))
+        elif data_collection_status == 1:
+            self.parent.text_console_logger(self.ERRORS.get("EmptyList"))
+        elif data_collection_status == 2:
+            self.parent.text_console_logger(self.ERRORS.get("Data_colection_timeout") + f"Failed at {Timeout_Location}")
+        elif data_collection_status == 5:
+            self.parent.text_console_logger(self.ERRORS.get("Backwards"))
+        else:
+            self.parent.text_console_logger(self.ERRORS.get("IDK"))
+
+        # End of line based method failed, try again with speed target
+        self.parent.text_console_logger("Trying nozzle rotation again with speed target...")
+        rawdata = self.Collecting_Nozzle_Rotation_Data(peripherals_list = peripherals_list, cycle = "speed")
+        # data_collection_status = 0 if all OK, 1 if List is empty, 2 if Timeout, 3 Unknown
+        data_collection_status = rawdata.get("Status_Check")
+        Nozzle_Rotation_Test_Data = rawdata.get("Collected_Data_List")
+        # Timeout Locations: 0.5@ turning Nozzle around before start, 1@ Sending Nozzle Home, 2@ Opening the Valve, 3@ Sending Nozzle Back Home (After Data Gathering)
+        # 4@ Closeing the Valve (After Data Gathering), 5@ test took longer than expected (i.e. nozzle stuck!)
+        Timeout_Location = rawdata.get("TimeoutWhere")
+
+        if data_collection_status == 0:
+            dataPointsWithFailureCount = self.Nozzle_Rotation_Speed_Calculator(peripherals_list, Nozzle_Rotation_Test_Data)
+            nozzle_rotation_test_failure_count = dataPointsWithFailureCount.get("Failure_Counter")
+            nozzle_rotation_test_Max_STD_failure = dataPointsWithFailureCount.get("Max_STD_Limit")
+            nozzle_rotation_test_Min_STD_failure = dataPointsWithFailureCount.get("Min_STD_Limit")
+            Nozzle_Rotation_Test_Data = dataPointsWithFailureCount.get("Collected_Data_List")
+            measured_average_speed = float(dataPointsWithFailureCount.get("Mean_Speed"))
+            measured_STD = float(dataPointsWithFailureCount.get("Measured_STD"))
+            peripherals_list.DUTsprinkler.nozzleRotationAve = round(measured_average_speed/100, 2)
+            peripherals_list.DUTsprinkler.nozzleRotationSTD = round(measured_STD/100, 2)
+            if "-v3" not in peripherals_list.DUTsprinkler.Firmware:
+                self.parent.text_console_logger(f"Nozzle motor current: {peripherals_list.DUTsprinkler.NozzleCurrentAve} mA, STD {peripherals_list.DUTsprinkler.NozzleCurrentSTD} mA")
+            if self.MINRotationSpeed <= measured_average_speed <= self.MAXRotationSpeed and nozzle_rotation_test_Max_STD_failure == False and nozzle_rotation_test_Min_STD_failure == False:
+                return NozzleRotationTestWithSubscribeResult(test_status = f"±Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec", step_start_time = startTime, Friction_Points = nozzle_rotation_test_failure_count, Nozzle_Rotation_Data = Nozzle_Rotation_Test_Data)
             elif (measured_average_speed < self.MINRotationSpeed or measured_average_speed > self.MAXRotationSpeed) and nozzle_rotation_test_Max_STD_failure == True:
                 return NozzleRotationTestWithSubscribeResult(test_status= f"Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("Max_STD") + " and...\n " + self.ERRORS.get("Rotation_Rate"), step_start_time = startTime,
                 Friction_Points = nozzle_rotation_test_failure_count, Nozzle_Rotation_Data = Nozzle_Rotation_Test_Data) 
@@ -445,13 +489,13 @@ class NozzleRotationTestWithSubscribe(TestStep):
             return NozzleRotationTestWithSubscribeResult(test_status = self.ERRORS.get("Backwards"), step_start_time = startTime, Friction_Points = nozzle_rotation_test_failure_count, Nozzle_Rotation_Data = Nozzle_Rotation_Test_Data)
         else:
             return NozzleRotationTestWithSubscribeResult(test_status = self.ERRORS.get("IDK"), step_start_time = startTime, Friction_Points=nozzle_rotation_test_failure_count, Nozzle_Rotation_Data = Nozzle_Rotation_Test_Data)
-        
-    def Collecting_Nozzle_Rotation_Data(self, peripherals_list: TestPeripherals):
+
+    def Collecting_Nozzle_Rotation_Data(self, peripherals_list: TestPeripherals, cycle: str = "duty"):
+        "Collects nozzle position and speed data for 360°"
         startTime = timeit.default_timer()
         Sensor_Read_List: list = []
         Nozzle_Rotation_Data: list = []
         NozzleCurrent: list = []
-        Nozzle_Home_Position = 0
         InitialAngularDelay = 1500 # in centideg
         check_stat: int = None # Will return 0 if all OK, 1 if List is empty, 2 if Timeout, 3 Unknown
      
@@ -481,8 +525,11 @@ class NozzleRotationTestWithSubscribe(TestStep):
         Recording = False
         RotationComplete = False
         Backwards = False
-        # start nozzle motor turning at desired duty cycle        
-        peripherals_list.DUTMLB.set_nozzle_duty(self.Nozzle_Duty_Cycle, 1)
+        # start nozzle motor turning at desired duty cycle / speed      
+        if cycle == "duty":
+            peripherals_list.DUTMLB.set_nozzle_duty(duty_cycle = self.Nozzle_Duty_Cycle, direction = 1)
+        else:
+            peripherals_list.DUTMLB.set_nozzle_speed(speed_centidegrees_per_sec = self.Nozzle_Speed, direction = 1)
         # turn on OtO data acquisition at 100Hz
         peripherals_list.DUTMLB.set_sensor_subscribe(subscribe_frequency = peripherals_list.DUTsprinkler.SubscribeFrequency)
         time.sleep(0.1)
@@ -560,7 +607,8 @@ class NozzleRotationTestWithSubscribe(TestStep):
             timeout_pos = None
         return {"Status_Check": check_stat, "TimeoutWhere": timeout_pos, "Collected_Data_List": Nozzle_Rotation_Data}
 
-    def Nozzle_Rotation_Speed_Calculator(self, peripherals_list: TestPeripherals, Nozzle_Rotation_Data: list): 
+    def Nozzle_Rotation_Speed_Calculator(self, peripherals_list: TestPeripherals, Nozzle_Rotation_Data: list):
+        "Calculates rotation speed information and saves a date stamped CSV file"
         Failed_Speed_counter:int = 0
         Max_Delta_Position: int = 100  # error count if more than this number of centidegrees between readings.
         number_of_data_points:int = 0

@@ -683,7 +683,7 @@ class MainWindow(tk.Tk):
         # self.text_console_logger('---------------------------------  DEVICE FAILED  -----------------------------------------')
 
     def text_console_logger(self, display_message: str):
-        """function to put text into the consle of the gui"""
+        "function to put text into the console of the gui"
         self.text_console.insert(tk.END,display_message + "\n")
         self.text_console.see(tk.END)
         self.text_console.update()
