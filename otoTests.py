@@ -1190,43 +1190,42 @@ class TestPump(TestStep):
                         PumpCurrent.append(DataPoint.pump_current_mA)
                 else:
                     PumpCurrent.append([round(float(peripherals_list.DUTMLB.get_currents().pump_current_mA), 3)])
-                if peripherals_list.DUTsprinkler.pump1Pass is False:
-                    if peripherals_list.gpioSuite.vacSwitchPin1.get() == 0:
-                        if UseSubscribe:
-                            ReturnMessage = peripherals_list.DUTMLB.set_sensor_subscribe(subscribe_frequency = peripherals_list.DUTsprinkler.SubscribeOff)
-                            peripherals_list.DUTMLB.clear_incoming_packet_log()
-                        ReturnMessage = peripherals_list.DUTMLB.set_pump_duty_cycle(pump_bay = self.target_pump, pump_duty_cycle = 0)
-                        peripherals_list.DUTsprinkler.pump1Pass = True
-                        peripherals_list.DUTsprinkler.Pump1CurrentAve = round(float(np.average(PumpCurrent)), 1)
-                        peripherals_list.DUTsprinkler.Pump1CurrentSTD = round(float(np.std(PumpCurrent)), 2)
-                        if self.target_pump == 1:
-                            return TestPumpResult(test_status = f"±Pump 1: {round(timeit.default_timer() - startTime, 3)} sec, {peripherals_list.DUTsprinkler.Pump1CurrentAve} mA, STD {peripherals_list.DUTsprinkler.Pump1CurrentSTD} mA", step_start_time = startTime, pass_criteria = self.PASS_TIME)
-                        else:
-                            return TestPumpResult(test_status = self.ERRORS.get("Wrong Pump") + f" Expected: {self.target_pump}, Triggered: Pump 1", step_start_time = startTime, pass_criteria = self.PASS_TIME)
-                    if peripherals_list.gpioSuite.vacSwitchPin2.get() == 0:
-                        if UseSubscribe:
-                            ReturnMessage = peripherals_list.DUTMLB.set_sensor_subscribe(subscribe_frequency = peripherals_list.DUTsprinkler.SubscribeOff)
-                            peripherals_list.DUTMLB.clear_incoming_packet_log()
-                        ReturnMessage = peripherals_list.DUTMLB.set_pump_duty_cycle(pump_bay = self.target_pump, pump_duty_cycle = 0)
-                        peripherals_list.DUTsprinkler.pump2Pass = True
-                        peripherals_list.DUTsprinkler.Pump2CurrentAve = round(float(np.average(PumpCurrent)), 1)
-                        peripherals_list.DUTsprinkler.Pump2CurrentSTD = round(float(np.std(PumpCurrent)), 2)
-                        if self.target_pump == 2:
-                            return TestPumpResult(test_status = f"±Pump 2: {round(timeit.default_timer() - startTime, 3)} sec, {peripherals_list.DUTsprinkler.Pump2CurrentAve} mA, STD {peripherals_list.DUTsprinkler.Pump2CurrentSTD} mA", step_start_time = startTime, pass_criteria = self.PASS_TIME)
-                        else:
-                            return TestPumpResult(test_status=self.ERRORS.get("Wrong Pump") + f" Expected: {self.target_pump}, Triggered: Pump 2", step_start_time = startTime, pass_criteria = self.PASS_TIME)
-                    if peripherals_list.gpioSuite.vacSwitchPin3.get() == 0:
-                        if UseSubscribe:
-                            ReturnMessage = peripherals_list.DUTMLB.set_sensor_subscribe(subscribe_frequency = peripherals_list.DUTsprinkler.SubscribeOff)
-                            peripherals_list.DUTMLB.clear_incoming_packet_log()
-                        ReturnMessage = peripherals_list.DUTMLB.set_pump_duty_cycle(pump_bay = self.target_pump, pump_duty_cycle = 0)
-                        peripherals_list.DUTsprinkler.pump3Pass = True
-                        peripherals_list.DUTsprinkler.Pump3CurrentAve = round(float(np.average(PumpCurrent)), 1)
-                        peripherals_list.DUTsprinkler.Pump3CurrentSTD = round(float(np.std(PumpCurrent)), 2)
-                        if self.target_pump == 3:
-                            return TestPumpResult(test_status = f"±Pump 3: {round(timeit.default_timer() - startTime, 3)} sec, {peripherals_list.DUTsprinkler.Pump3CurrentAve} mA, STD {peripherals_list.DUTsprinkler.Pump3CurrentSTD} mA", step_start_time = startTime, pass_criteria = self.PASS_TIME)
-                        else:
-                            return TestPumpResult(test_status = self.ERRORS.get("Wrong Pump") + f" Expected: {self.target_pump}, Triggered: Pump 3", step_start_time = startTime, pass_criteria = self.PASS_TIME)
+                if peripherals_list.gpioSuite.vacSwitchPin1.get() == 0 and peripherals_list.DUTsprinkler.pump1Pass is False:
+                    if UseSubscribe:
+                        ReturnMessage = peripherals_list.DUTMLB.set_sensor_subscribe(subscribe_frequency = peripherals_list.DUTsprinkler.SubscribeOff)
+                        peripherals_list.DUTMLB.clear_incoming_packet_log()
+                    ReturnMessage = peripherals_list.DUTMLB.set_pump_duty_cycle(pump_bay = self.target_pump, pump_duty_cycle = 0)
+                    peripherals_list.DUTsprinkler.pump1Pass = True
+                    peripherals_list.DUTsprinkler.Pump1CurrentAve = round(float(np.average(PumpCurrent)), 1)
+                    peripherals_list.DUTsprinkler.Pump1CurrentSTD = round(float(np.std(PumpCurrent)), 2)
+                    if self.target_pump == 1:
+                        return TestPumpResult(test_status = f"±Pump 1: {round(timeit.default_timer() - startTime, 3)} sec, {peripherals_list.DUTsprinkler.Pump1CurrentAve} mA, STD {peripherals_list.DUTsprinkler.Pump1CurrentSTD} mA", step_start_time = startTime, pass_criteria = self.PASS_TIME)
+                    else:
+                        return TestPumpResult(test_status = self.ERRORS.get("Wrong Pump") + f" Expected: {self.target_pump}, Triggered: Pump 1", step_start_time = startTime, pass_criteria = self.PASS_TIME)
+                if peripherals_list.gpioSuite.vacSwitchPin2.get() == 0 and peripherals_list.DUTsprinkler.pump2Pass is False:
+                    if UseSubscribe:
+                        ReturnMessage = peripherals_list.DUTMLB.set_sensor_subscribe(subscribe_frequency = peripherals_list.DUTsprinkler.SubscribeOff)
+                        peripherals_list.DUTMLB.clear_incoming_packet_log()
+                    ReturnMessage = peripherals_list.DUTMLB.set_pump_duty_cycle(pump_bay = self.target_pump, pump_duty_cycle = 0)
+                    peripherals_list.DUTsprinkler.pump2Pass = True
+                    peripherals_list.DUTsprinkler.Pump2CurrentAve = round(float(np.average(PumpCurrent)), 1)
+                    peripherals_list.DUTsprinkler.Pump2CurrentSTD = round(float(np.std(PumpCurrent)), 2)
+                    if self.target_pump == 2:
+                        return TestPumpResult(test_status = f"±Pump 2: {round(timeit.default_timer() - startTime, 3)} sec, {peripherals_list.DUTsprinkler.Pump2CurrentAve} mA, STD {peripherals_list.DUTsprinkler.Pump2CurrentSTD} mA", step_start_time = startTime, pass_criteria = self.PASS_TIME)
+                    else:
+                        return TestPumpResult(test_status=self.ERRORS.get("Wrong Pump") + f" Expected: {self.target_pump}, Triggered: Pump 2", step_start_time = startTime, pass_criteria = self.PASS_TIME)
+                if peripherals_list.gpioSuite.vacSwitchPin3.get() == 0 and peripherals_list.DUTsprinkler.pump3Pass is False:
+                    if UseSubscribe:
+                        ReturnMessage = peripherals_list.DUTMLB.set_sensor_subscribe(subscribe_frequency = peripherals_list.DUTsprinkler.SubscribeOff)
+                        peripherals_list.DUTMLB.clear_incoming_packet_log()
+                    ReturnMessage = peripherals_list.DUTMLB.set_pump_duty_cycle(pump_bay = self.target_pump, pump_duty_cycle = 0)
+                    peripherals_list.DUTsprinkler.pump3Pass = True
+                    peripherals_list.DUTsprinkler.Pump3CurrentAve = round(float(np.average(PumpCurrent)), 1)
+                    peripherals_list.DUTsprinkler.Pump3CurrentSTD = round(float(np.std(PumpCurrent)), 2)
+                    if self.target_pump == 3:
+                        return TestPumpResult(test_status = f"±Pump 3: {round(timeit.default_timer() - startTime, 3)} sec, {peripherals_list.DUTsprinkler.Pump3CurrentAve} mA, STD {peripherals_list.DUTsprinkler.Pump3CurrentSTD} mA", step_start_time = startTime, pass_criteria = self.PASS_TIME)
+                    else:
+                        return TestPumpResult(test_status = self.ERRORS.get("Wrong Pump") + f" Expected: {self.target_pump}, Triggered: Pump 3", step_start_time = startTime, pass_criteria = self.PASS_TIME)
 
             if UseSubscribe:
                 ReturnMessage = peripherals_list.DUTMLB.set_sensor_subscribe(subscribe_frequency = peripherals_list.DUTsprinkler.SubscribeOff)
