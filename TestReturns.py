@@ -28,7 +28,7 @@ class LogFileLocationError(Exception):
     pass
 
 class MainWindow(tk.Tk): 
-    ProgramVersion = "v0.5"
+    ProgramVersion = "v1.0"
     BAD_COLOUR = "RED"
     GOOD_COLOUR = "GREEN"
     IN_PROCESS_COLOUR = "YELLOW"

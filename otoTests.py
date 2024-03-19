@@ -90,6 +90,9 @@ class TestPeripherals:
                 if self.DUTsprinkler.nozzleOffset != None:
                     self.DUTMLB.set_nozzle_home_centidegrees(self.DUTsprinkler.nozzleOffset)
             self.DUTsprinkler.Firmware = self.DUTMLB.get_firmware_version().string
+            self.parent.textFirmware.delete(1.0,tk.END)
+            self.parent.textFirmware.insert(tk.END, self.DUTsprinkler.Firmware)
+            self.parent.textFirmware.update()
             if self.DUTsprinkler.Firmware < "v3":
                 self.parent.text_console_logger("changing PyOtO versions to match firmware...")
                 self.DUTMLB.stop_connection()
@@ -258,8 +261,9 @@ class GetUnitName(TestStep):
     def run_step(self, peripherals_list: TestPeripherals):
         startTime = timeit.default_timer()
         Firmware = peripherals_list.DUTsprinkler.Firmware
-        self.parent.labelFirmware.configure(text = Firmware)
-        self.parent.labelFirmware.update()
+        self.parent.textFirmware.delete(1.0,tk.END)
+        self.parent.textFirmware.insert(tk.END, Firmware)
+        self.parent.textFirmware.update()
         # If there isn't a BOM stop and error out
         try:
             peripherals_list.DUTsprinkler.bomNumber = peripherals_list.DUTMLB.get_device_hardware_version().string
