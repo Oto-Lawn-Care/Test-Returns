@@ -18,13 +18,15 @@ import math
 import tkinter as tk
 import json
 import matplotlib
+import globalvars
 matplotlib.use('Agg')   # needed to prevent multi-thread failures when using matplotlib
 from matplotlib import pyplot as plt
 
 class TestPeripherals:
     "This class will sort the inputs into objects that have been predefined. Only one com port is supported, and the program won't run if more than one USB card is connected."
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, parent: tk, *args, **kwargs):
+        self.parent = parent
         for entry in args:
             if isinstance(entry, otoSprinkler):
                 self.DUTsprinkler = entry
@@ -52,19 +54,19 @@ class TestPeripherals:
             import pyoto.otoProtocol.otoMessageDefs as otoMessageDefs
             import pyoto.otoProtocol.otoCommands as pyoto
             self.DUTMLB = pyoto.OtoInterface(pyoto.ConnectionType.UART, logger = None)
-            self.DUTMLB.start_connection(port = None, reset_on_connect = True)
-            while self.DUTsprinkler.UID == "":
-                try:
-                    self.DUTsprinkler.UID = self.DUTMLB.get_account_id().string
-                except pyoto.NotInitializedException:
-                    self.DUTsprinkler.UID = None
-                except pyoto.TooLongException:
-                    self.DUTsprinkler.UID = ""
-                except Exception as e:
-                    raise TypeError("Error reading UID from OtO!\n" + str(repr(e)))
+            self.DUTMLB.start_connection(port = globalvars.PortName, reset_on_connect = True)
+            try:
+                self.DUTsprinkler.UID = self.DUTMLB.get_account_id().string
+            except pyoto.NotInitializedException:
+                self.DUTsprinkler.UID = None
+            except pyoto.TooLongException:
+                self.DUTsprinkler.UID = ""
+            except Exception as e:
+                raise TypeError("Error reading UID from OtO!\n" + str(repr(e)))
             if self.DUTsprinkler.UID != None:  # wifi will mess us up, let's remove the UID from the OtO
+                self.parent.text_console_logger(f"Removing UID, SSID {self.DUTsprinkler.UID}")
                 try:
-                    self.DUTsprinkler.valveOffset = self.DUTMLB.get_valve_home_centidegrees().string
+                    self.DUTsprinkler.valveOffset = self.DUTMLB.get_valve_home_centidegrees().number
                 except pyoto.NotInitializedException:
                     self.DUTsprinkler.valveOffset = None
                 except pyoto.TooLongException:
@@ -72,22 +74,24 @@ class TestPeripherals:
                 except Exception as e:
                     raise TypeError("Error reading valve offset from OtO!\n" + str(repr(e)))
                 try:
-                    self.DUTsprinkler.nozzleOffset = self.DUTMLB.get_nozzle_home_centidegrees().string
+                    self.DUTsprinkler.nozzleOffset = self.DUTMLB.get_nozzle_home_centidegrees().number
                 except pyoto.NotInitializedException:
                     self.DUTsprinkler.nozzleOffset = None
                 except pyoto.TooLongException:
                     self.DUTsprinkler.nozzleOffset = ""
                 except Exception as e:
                     raise TypeError("Error reading nozzle offset from OtO!\n" + str(repr(e)))
-                self.DUTMLB.reset_flash_constants
+                self.DUTMLB.reset_flash_constants()
                 self.DUTMLB.stop_connection()
-                self.DUTMLB.start_connection(port = None, reset_on_connect = True)
+                self.DUTMLB.start_connection(port = globalvars.PortName, reset_on_connect = False)
+                self.parent.text_console_logger(f"Restoring offsets, valve: {self.DUTsprinkler.valveOffset/100}°, nozzle: {self.DUTsprinkler.nozzleOffset/100}°")
                 if self.DUTsprinkler.valveOffset != None:
                     self.DUTMLB.set_valve_home_centidegrees(self.DUTsprinkler.valveOffset)
                 if self.DUTsprinkler.nozzleOffset != None:
-                    self.DUTMLB.set_nozzle_home_centidegrees(self.DUTsprinkler.valveOffset)
+                    self.DUTMLB.set_nozzle_home_centidegrees(self.DUTsprinkler.nozzleOffset)
             self.DUTsprinkler.Firmware = self.DUTMLB.get_firmware_version().string
             if self.DUTsprinkler.Firmware < "v3":
+                self.parent.text_console_logger("changing PyOtO versions to match firmware...")
                 self.DUTMLB.stop_connection()
                 # first remove PyOtO from the module path sys.path, if it exists
                 try:
@@ -102,7 +106,7 @@ class TestPeripherals:
                 import pyoto2.otoProtocol.otoMessageDefs as otoMessageDefs
                 import pyoto2.otoProtocol.otoCommands as pyoto
                 self.DUTMLB = pyoto.OtoInterface(pyoto.ConnectionType.UART, logger = None)
-                self.DUTMLB.start_connection(port = None, reset_on_connect = True)
+                self.DUTMLB.start_connection(port = globalvars.PortName, reset_on_connect = False)
             self.DUTsprinkler.SubscribeFrequency = pyoto.SensorSubscribeFrequencyEnum.SENSOR_SUBSCRIBE_FREQUENCY_100Hz
             self.DUTsprinkler.SlowerSubscribeFrequency = pyoto.SensorSubscribeFrequencyEnum.SENSOR_SUBSCRIBE_FREQUENCY_10Hz
             self.DUTsprinkler.NoNVSException = pyoto.NotInitializedException
@@ -181,7 +185,7 @@ class CheckVacSwitch(TestStep):
     def run_step(self,peripherals_list:TestPeripherals):
         "Check if any of the vacuum switches are currently tripped"
         startTime = timeit.default_timer()
-        pumpErrors: str = None
+        pumpErrors: str = ""
         if peripherals_list.gpioSuite.vacSwitchPin1.get() == 1:
             peripherals_list.DUTsprinkler.vacuumFail += 1
             pumpErrors = "Pump vacuum was not held on Bay 1 (black cap)"
@@ -191,7 +195,8 @@ class CheckVacSwitch(TestStep):
         if peripherals_list.gpioSuite.vacSwitchPin3.get() == 1:
             peripherals_list.DUTsprinkler.vacuumFail += 4
             pumpErrors += "Pump vacuum was not held on Bay 3 (orange cap)"
-
+        if pumpErrors == "":
+            pumpErrors = None
         return CheckVacSwitchResult(test_status = pumpErrors, step_start_time = startTime)
 
 class CheckVacSwitchResult(TestResult):
@@ -978,7 +983,7 @@ class TestExternalPower(TestStep):
     ERRORS: Dict[str, str] = {
         "Current Below": "External charging current BELOW limit ",
         "Current Above": "External charging current ABOVE limit ",
-        "Voltaget Below": "External charging voltage BELOW limit ",
+        "Voltage Below": "External charging voltage BELOW limit ",
         "Voltage Above": "External charging voltage ABOVE limit "
         }
 
@@ -1130,7 +1135,7 @@ class TestMoesFullyOpen(TestStep):
                 if DeltaAngle < 0:
                     DeltaAngle = 36000 + DeltaAngle
                 valve_Offset = (DeltaAngle + saved_MLB + PretendChangeAmount) % 36000 # this makes it absolute
-                self.parent.text_console_logger(f"Revised Valve Postion: {(DeltaAngle + PretendChangeAmount)/100}°")
+                self.parent.text_console_logger(f"Revised Valve Postion: {valve_Offset/100}°")
                 PretendChangeAmount = PretendChangeAmount + DeltaAngle
                 Repeats += 1
         ReturnMessage = peripherals_list.DUTMLB.set_valve_position(wait_for_complete = False, valve_position_centideg = 11000)
@@ -1294,22 +1299,14 @@ class TestSolar(TestStep):
             elif solarCurrent == 0:
                 return TestSolarResult(test_status = self.ERRORS.get("No Current"), step_start_time = startTime, pass_criteria = self.PASS_CURRENT, actual_current = solarCurrent, actual_voltage = 0)
         else:
-            if self.PASS_CURRENT <= solarCurrent <= self.MAX_CURRENT:
-                TestStatus = f"Solar Panel {solarCurrent}mA, "
-            elif solarCurrent >= self.MAX_CURRENT:
-                TestStatus = self.ERRORS.get("Solar AboveC") + f"[{self.MAX_CURRENT}]: {solarCurrent}mA, "
-            elif solarCurrent < self.PASS_CURRENT and solarCurrent != 0:
-                TestStatus = self.ERRORS.get("Solar BelowC")+ f"[{self.PASS_CURRENT}]: {solarCurrent}mA, "
-            elif solarCurrent == 0:
-                TestStatus = self.ERRORS.get("No Current") + ", "
             if self.PASS_VOLTAGE <= solarVoltage <= self.MAX_VOLTAGE:
-                TestStatus += f"Solar Panel: {solarVoltage}V"
+                TestStatus = f"±Solar Panel: {solarVoltage}V"
             elif solarVoltage >= self.MAX_VOLTAGE:
-                TestStatus += self.ERRORS.get("Solar Above") + f"[{self.MAX_VOLTAGE}]: {solarVoltage}V"
+                TestStatus = self.ERRORS.get("Solar Above") + f"[{self.MAX_VOLTAGE}]: {solarVoltage}V"
             elif solarVoltage < self.PASS_VOLTAGE and solarVoltage != 0:
-                TestStatus += self.ERRORS.get("Solar Below")+ f"[{self.PASS_VOLTAGE}]: {solarVoltage}V"
+                TestStatus = self.ERRORS.get("Solar Below")+ f"[{self.PASS_VOLTAGE}]: {solarVoltage}V"
             elif solarVoltage == 0:
-                TestStatus += self.ERRORS.get("No Voltage")
+                TestStatus = self.ERRORS.get("No Voltage")
             return TestSolarResult(test_status = TestStatus, step_start_time = startTime, pass_criteria = self.PASS_CURRENT, actual_current = solarCurrent, actual_voltage = solarVoltage)
         
 class TestSolarResult(TestResult):

@@ -46,7 +46,7 @@ class MainWindow(tk.Tk):
         self.FIGSIZEY = self.FIGSIZEY * self.SCALEFACTOR  # scaled height of chart window
         sns.set_theme(font = "Microsoft YaHei", font_scale = 1.5 * self.SCALEFACTOR)  # sets the default seaborn chart colours and fonts
 
-        self.device_list = TestPeripherals()
+        self.device_list = TestPeripherals(parent = self)
         self.test_suite = TestSuite(name = f"OtO Unit Return Function Test {self.ProgramVersion}",
                             test_list=[
                                 GetUnitName(name = "Unit Name Check", parent = self),
@@ -246,7 +246,7 @@ class MainWindow(tk.Tk):
                     self.status_labels[index].update()
                     if self.test_result_list[index].test_status != None:
                         self.text_console_logger(display_message = self.test_result_list[index].test_status[1:])
-                    index += 1
+                index += 1
 
             #Step 5: While Loop Complete or Escaped
             if self.abort_test_bool is True:
@@ -499,7 +499,7 @@ class MainWindow(tk.Tk):
                 self.text_console.configure(bg = self.IN_PROCESS_COLOUR)
                 if str(e) == "Ping Failed":
                     self.text_console_logger("No OtO found. Check that the grey ribbon cable is plugged into OtO.")
-                elif str(e) == "No Otos found on Serial Ports":
+                elif str(e) == "No Otos found on Serial Port":
                     self.text_console_logger("No serial card found. Check that the USB communication serial card is plugged in.")
                 else:
                     self.text_console_logger(display_message = str(e))
@@ -532,7 +532,7 @@ class MainWindow(tk.Tk):
             self.text_console.configure(bg = self.IN_PROCESS_COLOUR)
             if str(e) == "Ping Failed":
                 self.text_console_logger("No OtO found. Check that the grey ribbon cable is plugged into OtO.")
-            elif str(e) == "No Otos found on Serial Ports":
+            elif str(e) == "No Otos found on Serial Port":
                 self.text_console_logger("No serial card found. Check that the USB communication serial card is plugged in.")
             else:
                 if len(str(e)) > 0:
@@ -716,7 +716,7 @@ class MainWindow(tk.Tk):
             self.text_console.configure(bg = self.IN_PROCESS_COLOUR)
             if str(e) == "Ping Failed":
                 self.text_console_logger("No OtO found. Check that the grey ribbon cable is plugged into OtO.")
-            elif str(e) == "No Otos found on Serial Ports":
+            elif str(e) == "No Otos found on Serial Port":
                 self.text_console_logger("No serial card found. Check that the USB communication serial card is plugged in.")
             else:
                 if len(str(e)) > 0:
@@ -767,6 +767,7 @@ class MainWindow(tk.Tk):
         if len(OtOPortList) > 1: # in case more than one USB card is plugged in, stop test
             return False
         else:
+            globalvars.PortName = OtOPortList[0]
             return True
 
     def vac_interrupt(self):
