@@ -1072,7 +1072,7 @@ class TestMoesFullyOpen(TestStep):
     def run_step(self, peripherals_list: TestPeripherals):
         target = 9000  # nominal open in centidegrees
         tolerance = 5650  # nominal movement to closed from target in centidegrees
-        AdjustmentFactor = 25  # factor used to move angle, the square root of pressure ADC difference divided by this factor x 1°, when adjusting the zero position
+        AdjustmentFactor = 45  # factor used to move angle, the square root of pressure ADC difference divided by this factor x 1°, when adjusting the zero position
         SpanTolerance = 500  # acceptance tolerance between the two pressure ADC values, 2411 data
         SigmaSpanTolerance = 80  # acceptance σ tolerance between the two pressure ADC sigmas. 2411 data
         PretendChangeAmount = 0  # we won't actually adjust the closed valve position value in the NVS RAM, but we will pretend to and see if it passes
@@ -1369,7 +1369,10 @@ class ValveCalibration(TestStep):
         
         # Rotate valve backwards 5 degrees to make sure it can!
         TestPosition = (CurrentValvePosition + 35500) % 36000
-        ReturnMessage = peripherals_list.DUTMLB.set_valve_position(valve_position_centideg = TestPosition, wait_for_complete = True)
+        try:
+            ReturnMessage = peripherals_list.DUTMLB.set_valve_position(valve_position_centideg = TestPosition, wait_for_complete = True)
+        except:
+            return ValveCalibrationResult (test_status = "Error moving valve!", step_start_time = start_time)
         if ReturnMessage.message_type_string != "CTRL_OUT_COMMAND_COMPLETE":
             return ValveCalibrationResult (test_status = "Valve won't rotate backwards!", step_start_time = start_time)
         if not hasattr(peripherals_list, "gpioSuite"): # if called by itself by one button press
