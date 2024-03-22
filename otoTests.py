@@ -421,24 +421,24 @@ class NozzleRotationTestWithSubscribe(TestStep):
             peripherals_list.DUTsprinkler.nozzleRotationSTD = round(measured_STD/100, 2)
             if "-v3" not in peripherals_list.DUTsprinkler.Firmware:
                 if peripherals_list.DUTsprinkler.NozzleCurrentAve > self.MAXNMotorCurrent or peripherals_list.DUTsprinkler.NozzleCurrentAve < self.MINNMotorCurrent:
-                    self.parent.text_console_logger(f"Nozzle motor current out of range! {self.MINNMotorCurrent}-{self.MAXNMotorCurrent}mA. Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec, motor {peripherals_list.DUTsprinkler.NozzleCurrentAve} mA, STD {peripherals_list.DUTsprinkler.NozzleCurrentSTD} mA")
+                    self.parent.text_console_logger(f"Nozzle motor current out of range! {self.MINNMotorCurrent}-{self.MAXNMotorCurrent}mA. Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, σ {round(measured_STD/100, 2)}°/sec, motor {peripherals_list.DUTsprinkler.NozzleCurrentAve} mA, STD {peripherals_list.DUTsprinkler.NozzleCurrentSTD} mA")
                 if peripherals_list.DUTsprinkler.NozzleCurrentSTD > self.MAXNMotorCurrentSTD or peripherals_list.DUTsprinkler.NozzleCurrentSTD < self.MINNMotorCurrentSTD:
-                    self.parent.text_console_logger(f"Nozzle motor current variation too large! {self.MINNMotorCurrent}-{self.MAXNMotorCurrent}mA\nNozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec, motor {peripherals_list.DUTsprinkler.NozzleCurrentAve} mA, STD {peripherals_list.DUTsprinkler.NozzleCurrentSTD} mA")
+                    self.parent.text_console_logger(f"Nozzle motor current variation too large! {self.MINNMotorCurrent}-{self.MAXNMotorCurrent}mA\nNozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, σ {round(measured_STD/100, 2)}°/sec, motor {peripherals_list.DUTsprinkler.NozzleCurrentAve} mA, STD {peripherals_list.DUTsprinkler.NozzleCurrentSTD} mA")
             if self.MINRotationSpeed <= measured_average_speed <= self.MAXRotationSpeed and nozzle_rotation_test_Max_STD_failure == False and nozzle_rotation_test_Min_STD_failure == False:
-                return NozzleRotationTestWithSubscribeResult(test_status = f"±Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec, motor {peripherals_list.DUTsprinkler.NozzleCurrentAve} mA, STD {peripherals_list.DUTsprinkler.NozzleCurrentSTD} mA",
+                return NozzleRotationTestWithSubscribeResult(test_status = f"±Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, σ {round(measured_STD/100, 2)}°/sec, motor {peripherals_list.DUTsprinkler.NozzleCurrentAve} mA, σ {peripherals_list.DUTsprinkler.NozzleCurrentSTD} mA",
                 step_start_time = startTime, Friction_Points = nozzle_rotation_test_failure_count, Nozzle_Rotation_Data = Nozzle_Rotation_Test_Data)
             elif (measured_average_speed < self.MINRotationSpeed or measured_average_speed > self.MAXRotationSpeed) and nozzle_rotation_test_Max_STD_failure == True:
-                self.parent.text_console_logger(f"Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("Max_STD") + " and...\n " + self.ERRORS.get("Rotation_Rate"))
+                self.parent.text_console_logger(f"Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, σ {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("Max_STD") + " and...\n " + self.ERRORS.get("Rotation_Rate"))
             elif (measured_average_speed < self.MINRotationSpeed or measured_average_speed > self.MAXRotationSpeed) and nozzle_rotation_test_Min_STD_failure == True:
-                self.parent.text_console_logger(f"Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("Min_STD") + " and...\n " + self.ERRORS.get("Rotation_Rate"))
+                self.parent.text_console_logger(f"Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, σ {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("Min_STD") + " and...\n " + self.ERRORS.get("Rotation_Rate"))
             elif measured_average_speed < self.MINRotationSpeed or measured_average_speed > self.MAXRotationSpeed:
-                self.parent.text_console_logger(f"Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("Rotation_Rate"))
+                self.parent.text_console_logger(f"Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, σ {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("Rotation_Rate"))
             elif nozzle_rotation_test_Max_STD_failure == True:
-                self.parent.text_console_logger(f"Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("Max_STD"))
+                self.parent.text_console_logger(f"Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, σ {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("Max_STD"))
             elif nozzle_rotation_test_Min_STD_failure == True:
-                self.parent.text_console_logger(f"Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("Min_STD"))
+                self.parent.text_console_logger(f"Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, σ {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("Min_STD"))
             else:
-                self.parent.text_console_logger(f"Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("IDK"))
+                self.parent.text_console_logger(f"Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, σ {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("IDK"))
         elif data_collection_status == 1:
             self.parent.text_console_logger(self.ERRORS.get("EmptyList"))
         elif data_collection_status == 2:
@@ -469,26 +469,26 @@ class NozzleRotationTestWithSubscribe(TestStep):
             peripherals_list.DUTsprinkler.nozzleRotationAve = round(measured_average_speed/100, 2)
             peripherals_list.DUTsprinkler.nozzleRotationSTD = round(measured_STD/100, 2)
             if "-v3" not in peripherals_list.DUTsprinkler.Firmware:
-                self.parent.text_console_logger(f"Nozzle motor current: {peripherals_list.DUTsprinkler.NozzleCurrentAve} mA, STD {peripherals_list.DUTsprinkler.NozzleCurrentSTD} mA")
+                self.parent.text_console_logger(f"Nozzle motor current: {peripherals_list.DUTsprinkler.NozzleCurrentAve} mA, σ {peripherals_list.DUTsprinkler.NozzleCurrentSTD} mA")
             if self.MINRotationSpeed <= measured_average_speed <= self.MAXRotationSpeed and nozzle_rotation_test_Max_STD_failure == False and nozzle_rotation_test_Min_STD_failure == False:
-                return NozzleRotationTestWithSubscribeResult(test_status = f"±Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec", step_start_time = startTime, Friction_Points = nozzle_rotation_test_failure_count, Nozzle_Rotation_Data = Nozzle_Rotation_Test_Data)
+                return NozzleRotationTestWithSubscribeResult(test_status = f"±Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, σ {round(measured_STD/100, 2)}°/sec", step_start_time = startTime, Friction_Points = nozzle_rotation_test_failure_count, Nozzle_Rotation_Data = Nozzle_Rotation_Test_Data)
             elif (measured_average_speed < self.MINRotationSpeed or measured_average_speed > self.MAXRotationSpeed) and nozzle_rotation_test_Max_STD_failure == True:
-                return NozzleRotationTestWithSubscribeResult(test_status= f"Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("Max_STD") + " and...\n " + self.ERRORS.get("Rotation_Rate"), step_start_time = startTime,
+                return NozzleRotationTestWithSubscribeResult(test_status= f"Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, σ {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("Max_STD") + " and...\n " + self.ERRORS.get("Rotation_Rate"), step_start_time = startTime,
                 Friction_Points = nozzle_rotation_test_failure_count, Nozzle_Rotation_Data = Nozzle_Rotation_Test_Data) 
             elif (measured_average_speed < self.MINRotationSpeed or measured_average_speed > self.MAXRotationSpeed) and nozzle_rotation_test_Min_STD_failure == True:
-                return NozzleRotationTestWithSubscribeResult(test_status= f"Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("Min_STD") + " and...\n " + self.ERRORS.get("Rotation_Rate"), step_start_time = startTime,
+                return NozzleRotationTestWithSubscribeResult(test_status= f"Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, σ {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("Min_STD") + " and...\n " + self.ERRORS.get("Rotation_Rate"), step_start_time = startTime,
                 Friction_Points = nozzle_rotation_test_failure_count, Nozzle_Rotation_Data = Nozzle_Rotation_Test_Data) 
             elif measured_average_speed < self.MINRotationSpeed or measured_average_speed > self.MAXRotationSpeed:
-                return NozzleRotationTestWithSubscribeResult(test_status = f"Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("Rotation_Rate"), step_start_time = startTime,
+                return NozzleRotationTestWithSubscribeResult(test_status = f"Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, σ {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("Rotation_Rate"), step_start_time = startTime,
                 Friction_Points = nozzle_rotation_test_failure_count, Nozzle_Rotation_Data = Nozzle_Rotation_Test_Data)   
             elif nozzle_rotation_test_Max_STD_failure == True:
-                return NozzleRotationTestWithSubscribeResult(test_status = f"Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("Max_STD"), step_start_time = startTime,
+                return NozzleRotationTestWithSubscribeResult(test_status = f"Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, σ {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("Max_STD"), step_start_time = startTime,
                 Friction_Points = nozzle_rotation_test_failure_count, Nozzle_Rotation_Data = Nozzle_Rotation_Test_Data)  
             elif nozzle_rotation_test_Min_STD_failure == True:
-                return NozzleRotationTestWithSubscribeResult(test_status = f"Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("Min_STD"), step_start_time = startTime,
+                return NozzleRotationTestWithSubscribeResult(test_status = f"Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, σ {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("Min_STD"), step_start_time = startTime,
                 Friction_Points = nozzle_rotation_test_failure_count, Nozzle_Rotation_Data = Nozzle_Rotation_Test_Data)  
             else:
-                return NozzleRotationTestWithSubscribeResult(test_status = f"Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, STD {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("IDK"), step_start_time = startTime,
+                return NozzleRotationTestWithSubscribeResult(test_status = f"Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, σ {round(measured_STD/100, 2)}°/sec\n" + self.ERRORS.get("IDK"), step_start_time = startTime,
                 Friction_Points = nozzle_rotation_test_failure_count, Nozzle_Rotation_Data = Nozzle_Rotation_Test_Data) 
         elif data_collection_status == 1:
             return NozzleRotationTestWithSubscribeResult(test_status = self.ERRORS.get("EmptyList"), step_start_time = startTime, Friction_Points = nozzle_rotation_test_failure_count, Nozzle_Rotation_Data = Nozzle_Rotation_Test_Data)
@@ -904,13 +904,13 @@ class PressureCheck(TestStep):
 
         if not STD_check or not ADC_check:
             if not STD_check and not ADC_check:
-                return PressureCheckResult(test_status = self.ERRORS.get("BAD_Both") + f", Set Min and Max: {min_acceptable_ADC , max_acceptable_ADC}, Measured ADC: {mean}, et Min and Max: {min_acceptable_STD , max_acceptable_STD}, Measured STD: {standardDeviation}", step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
+                return PressureCheckResult(test_status = self.ERRORS.get("BAD_Both") + f", Set Min and Max: {min_acceptable_ADC, max_acceptable_ADC}, Measured ADC: {int(mean)}, σ: {standardDeviation:,}", step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
             if not STD_check:
-                return PressureCheckResult(test_status = self.ERRORS.get("BAD_STD") + f", Set Min and Max: {min_acceptable_STD , max_acceptable_STD}, Measured STD: {standardDeviation}", step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
+                return PressureCheckResult(test_status = self.ERRORS.get("BAD_STD") + f", Set Min and Max: {min_acceptable_STD , max_acceptable_STD}, σ: {standardDeviation:,}", step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
             if not ADC_check: 
-                return PressureCheckResult(test_status = f"Set Min and Max: {min_acceptable_ADC , max_acceptable_ADC}, Measured ADC: {mean}", step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
+                return PressureCheckResult(test_status = f"Set Min and Max: {min_acceptable_ADC , max_acceptable_ADC}, Measured ADC: {int(mean)}", step_start_time = startTime, Zero_P = mean, Zero_P_Tolerance = Zero_Tolerance)
 
-        return PressureCheckResult(test_status = f"±Zero Pressure Reading: {mean:,} ADC, STD: {standardDeviation:,} ADC", step_start_time = startTime, Zero_P= mean, Zero_P_Tolerance= Zero_Tolerance)
+        return PressureCheckResult(test_status = f"±Zero Pressure Reading: {int(mean):,} ADC, σ: {standardDeviation:,} ADC", step_start_time = startTime, Zero_P= mean, Zero_P_Tolerance= Zero_Tolerance)
             
 class PressureCheckResult(TestResult):
     def __init__(self, test_status: Union[str, None], step_start_time: float, Zero_P:int, Zero_P_Tolerance:int):
@@ -1208,7 +1208,7 @@ class TestPump(TestStep):
                     peripherals_list.DUTsprinkler.Pump1CurrentAve = round(float(np.average(PumpCurrent)), 1)
                     peripherals_list.DUTsprinkler.Pump1CurrentSTD = round(float(np.std(PumpCurrent)), 2)
                     if self.target_pump == 1:
-                        return TestPumpResult(test_status = f"±Pump 1: {round(timeit.default_timer() - startTime, 3)} sec, {peripherals_list.DUTsprinkler.Pump1CurrentAve} mA, STD {peripherals_list.DUTsprinkler.Pump1CurrentSTD} mA", step_start_time = startTime, pass_criteria = self.PASS_TIME)
+                        return TestPumpResult(test_status = f"±Pump 1: {round(timeit.default_timer() - startTime, 3)} sec, {peripherals_list.DUTsprinkler.Pump1CurrentAve} mA, σ {peripherals_list.DUTsprinkler.Pump1CurrentSTD} mA", step_start_time = startTime, pass_criteria = self.PASS_TIME)
                     else:
                         return TestPumpResult(test_status = self.ERRORS.get("Wrong Pump") + f" Expected: {self.target_pump}, Triggered: Pump 1", step_start_time = startTime, pass_criteria = self.PASS_TIME)
                 if peripherals_list.gpioSuite.vacSwitchPin2.get() == 0 and peripherals_list.DUTsprinkler.pump2Pass is False:
@@ -1220,7 +1220,7 @@ class TestPump(TestStep):
                     peripherals_list.DUTsprinkler.Pump2CurrentAve = round(float(np.average(PumpCurrent)), 1)
                     peripherals_list.DUTsprinkler.Pump2CurrentSTD = round(float(np.std(PumpCurrent)), 2)
                     if self.target_pump == 2:
-                        return TestPumpResult(test_status = f"±Pump 2: {round(timeit.default_timer() - startTime, 3)} sec, {peripherals_list.DUTsprinkler.Pump2CurrentAve} mA, STD {peripherals_list.DUTsprinkler.Pump2CurrentSTD} mA", step_start_time = startTime, pass_criteria = self.PASS_TIME)
+                        return TestPumpResult(test_status = f"±Pump 2: {round(timeit.default_timer() - startTime, 3)} sec, {peripherals_list.DUTsprinkler.Pump2CurrentAve} mA, σ {peripherals_list.DUTsprinkler.Pump2CurrentSTD} mA", step_start_time = startTime, pass_criteria = self.PASS_TIME)
                     else:
                         return TestPumpResult(test_status=self.ERRORS.get("Wrong Pump") + f" Expected: {self.target_pump}, Triggered: Pump 2", step_start_time = startTime, pass_criteria = self.PASS_TIME)
                 if peripherals_list.gpioSuite.vacSwitchPin3.get() == 0 and peripherals_list.DUTsprinkler.pump3Pass is False:
@@ -1256,7 +1256,7 @@ class TestPump(TestStep):
                     return TestPumpResult(test_status = f"Pump {self.target_pump} did not run. Pump current: {round(float(np.average(PumpCurrent)), 1)} mA, STD {round(float(np.std(PumpCurrent)), 2)}", step_start_time = startTime, pass_criteria = self.PASS_TIME)
                 elif round(float(np.average(PumpCurrent)), 1) > 600:
                     return TestPumpResult(test_status = f"Pump {self.target_pump} is stalled. Pump current: {round(float(np.average(PumpCurrent)), 1)} mA, STD {round(float(np.std(PumpCurrent)), 2)}", step_start_time = startTime, pass_criteria = self.PASS_TIME)
-            return TestPumpResult(test_status = self.ERRORS.get("No Pumps") + f" Check {self.CAPS[self.target_pump - 1]} cap is tight. Pump current: {round(float(np.average(PumpCurrent)), 1)} mA, STD {round(float(np.std(PumpCurrent)), 2)}", step_start_time = startTime, pass_criteria = self.PASS_TIME)
+            return TestPumpResult(test_status = self.ERRORS.get("No Pumps") + f" Check {self.CAPS[self.target_pump - 1]} cap is tight. Pump current: {round(float(np.average(PumpCurrent)), 1)} mA, σ {round(float(np.std(PumpCurrent)), 2)}", step_start_time = startTime, pass_criteria = self.PASS_TIME)
         else:
             return TestPumpResult(test_status = self.ERRORS.get("Invalid Target Pump"), step_start_time = startTime, pass_criteria = self.PASS_TIME)
 
@@ -1471,7 +1471,7 @@ class ValveCalibration(TestStep):
         peripherals_list.DUTsprinkler.valveRawData = valve_calibration_data
 
         if "-v4" in peripherals_list.DUTsprinkler.Firmware or "-v5" in peripherals_list.DUTsprinkler.Firmware:
-            self.parent.text_console_logger(f"Valve Motor {peripherals_list.DUTsprinkler.ValveCurrentAve} mA, STD {peripherals_list.DUTsprinkler.ValveCurrentSTD} mA")
+            self.parent.text_console_logger(f"Valve Motor {peripherals_list.DUTsprinkler.ValveCurrentAve} mA, σ {peripherals_list.DUTsprinkler.ValveCurrentSTD} mA")
 
         pressure_sensor_check = peripherals_list.DUTMLB.get_pressure_sensor_version().pressure_sensor_version
         if pressure_sensor_check == peripherals_list.DUTsprinkler.psig15:
@@ -1702,7 +1702,7 @@ class VerifyValveOffsetTarget(TestStep):
             if (pressure_reading <= zero_P_ADC + self.PRESSURE_ADC_TOLERANCE) and (pressure_reading >= zero_P_ADC - self.PRESSURE_ADC_TOLERANCE) and (STD_pressure_reading <= zeroTolerance/multiple_STD + self.STD_UPPER_LIMIT_TO_MEAN) and (STD_pressure_reading >= zeroTolerance/multiple_STD - self.STD_LOWER_LIMIT_TO_MEAN):
                 return VerifyValveOffsetTargetResult(test_status = f"±Closed Valve Pressure: {pressure_reading:,} ADC, STD {STD_pressure_reading:,}", step_start_time = startTime, Valve_Target = True, pressureReading = pressure_reading, Relative_valveOffset = valveTarget, Actual_Valve_Position = valve_position)
             else:
-                return VerifyValveOffsetTargetResult(test_status=self.ERROR.get("NonZeroPressure") + f"\nPressure: {pressure_reading:,} ADC, STD {STD_pressure_reading:,} Valve Error: {round((valveTarget - valve_position)/100, 2)}°", step_start_time=startTime, Valve_Target=False, pressureReading = pressure_reading, Relative_valveOffset = valveTarget, Actual_Valve_Position = valve_position)
+                return VerifyValveOffsetTargetResult(test_status=self.ERROR.get("NonZeroPressure") + f"\nPressure: {pressure_reading:,} ADC, σ {STD_pressure_reading:,} Valve Error: {round((valveTarget - valve_position)/100, 2)}°", step_start_time=startTime, Valve_Target=False, pressureReading = pressure_reading, Relative_valveOffset = valveTarget, Actual_Valve_Position = valve_position)
         else:
             return VerifyValveOffsetTargetResult(test_status=self.ERRORS.get("NotFullyClosed") + f"Offset: {valveTarget/100}°±{self.VALVE_TARGET_TOLERANCE/100}° ; Reading {valve_position/100}°", pressureReading = pressure_reading, Relative_valveOffset = valveTarget, Actual_Valve_Position = valve_position)
 

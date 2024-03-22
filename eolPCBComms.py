@@ -43,7 +43,7 @@ class GpioSuite:
         try:
             self.gpioDev = list(self.lib.find(serialBlock=1))[0]
         except IndexError:
-            raise Exception("TEST CONTROLLER WASN'T FOUND. Is it plugged in?\n测试控制器没有找到, 是否已插入?")
+            raise Exception("TEST CONTROLLER WASN'T FOUND. Is it plugged in?")
         self.gpioController = CyGPIO(self.gpioDev)
         self.airSolenoidPin = GpioPin(pinNumber=self.GPIO_AIR_SOLENOID, targetController=self.gpioController)
         self.waterSolenoidPin = GpioPin(pinNumber=self.GPIO_WATER_SOLENOID, targetController=self.gpioController)

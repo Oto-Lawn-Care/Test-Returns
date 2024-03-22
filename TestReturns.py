@@ -14,7 +14,7 @@ import matplotlib
 import globalvars  # anyvariable/funtion you want globally available goes here
 import serial
 import pyoto.otoProtocol.otoCommands as pyoto
-matplotlib.use('Agg')  # needed to prevent multi-thread failures when using matplotlib
+matplotlib.use("Agg")  # needed to prevent multi-thread failures when using matplotlib
 from matplotlib import pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
@@ -28,7 +28,7 @@ class LogFileLocationError(Exception):
     pass
 
 class MainWindow(tk.Tk): 
-    ProgramVersion = "v1.0"
+    ProgramVersion = "v1.1"
     BAD_COLOUR = "RED"
     GOOD_COLOUR = "GREEN"
     IN_PROCESS_COLOUR = "YELLOW"
@@ -78,11 +78,11 @@ class MainWindow(tk.Tk):
         self.GraphHolder = tk.Frame(self, bg = self.NORMAL_COLOUR, relief = "sunken", border = 3, width = int(2000 * self.SCALEFACTOR))
         self.GraphHolder.grid_propagate(False)
         self.label_device_id = tk.Label(self, text = "Unit Name:", font = self.smaller_font, padx = int(5 * self.SCALEFACTOR))
-        self.text_device_id = tk.Text(self, width = 10, font = self.status_font, height = 1, padx = int(5 * self.SCALEFACTOR), pady = int(5 * self.SCALEFACTOR))
+        self.text_device_id = tk.Text(self, width = 12, font = self.status_font, height = 1, padx = int(5 * self.SCALEFACTOR), pady = int(5 * self.SCALEFACTOR))
         self.label_bom_number = tk.Label(self, text = "BOM:", font = self.smaller_font, padx = int(5 * self.SCALEFACTOR))
-        self.text_bom_number = tk.Text(self, width = 10, font = self.status_font, height = 1, padx = int(5 * self.SCALEFACTOR), pady = int(5 * self.SCALEFACTOR))
+        self.text_bom_number = tk.Text(self, width = 12, font = self.status_font, height = 1, padx = int(5 * self.SCALEFACTOR), pady = int(5 * self.SCALEFACTOR))
         self.labelFirmware = tk.Label(self, text = "Firmware:", font = self.smaller_font, padx = int(5 * self.SCALEFACTOR))
-        self.textFirmware = tk.Text(self, width = 10, font = self.status_font, height = 1, padx = int(5 * self.SCALEFACTOR), pady = int (5 * self.SCALEFACTOR))
+        self.textFirmware = tk.Text(self, width = 12, font = self.status_font, height = 1, padx = int(5 * self.SCALEFACTOR), pady = int (5 * self.SCALEFACTOR))
 
         # Program Variables
         self.abort_test_bool: bool = False
@@ -212,7 +212,6 @@ class MainWindow(tk.Tk):
         self.reset_status_color()
         if not self.USBCheck():
             self.text_console.configure(bg = self.IN_PROCESS_COLOUR)
-            self.text_console_logger("Too many USB cards attached for EOL test")
             self.one_button_to_rule_them_all.configure(text = "START", bg = self.GOOD_COLOUR, fg = self.NORMAL_COLOUR, command = self.execute_tests, state = "normal")
             self.turn_valve_button.configure(state = "normal")
             return None
@@ -276,7 +275,7 @@ class MainWindow(tk.Tk):
             elif str(e) == "No Otos found on Serial Ports":
                 self.text_console_logger("No serial card found. Check that the USB communication serial card is plugged in.")
             else:
-                self.text_console_logger(display_message = str(repr(e)))
+                self.text_console_logger(display_message = str(e))
             self.one_button_to_rule_them_all.configure(text = "START", bg = self.GOOD_COLOUR, fg = self.NORMAL_COLOUR, command = self.execute_tests, state = "normal")
             self.turn_valve_button.configure(state = "normal")
 
@@ -303,7 +302,7 @@ class MainWindow(tk.Tk):
             else:
                 self.text_console_logger(display_message = "UNEXPECTED PROGRAM ERROR!")
         except Exception as e:
-            raise Exception(e)
+            raise Exception(str(e))
 
     def log_unit_data(self):
         "logging raw data about the testSteps. every single testStep in the testSuite run must be added to this function otherwise it will error out"
@@ -477,7 +476,6 @@ class MainWindow(tk.Tk):
         self.status_labels[ButtonNumber].update()
         if not self.USBCheck():
             self.text_console.configure(bg = self.IN_PROCESS_COLOUR)
-            self.text_console_logger("Too many USB cards attached for EOL test")
             self.status_labels[ButtonNumber].configure(bg = self.NORMAL_COLOUR, state = "normal")
             self.status_labels[ButtonNumber].update()
             self.one_button_to_rule_them_all.configure(state = "normal")
@@ -491,7 +489,7 @@ class MainWindow(tk.Tk):
             self.one_button_to_rule_them_all.configure(state = "normal")
             self.turn_valve_button.configure(state = "normal")
             return None
-        elif FunctionName in "Check Battery Zero Pressure Check Send Nozzle Home":  # these functions don't need control board
+        elif FunctionName in "Check Battery Zero Pressure Check Send Nozzle Home Nozzle Rotation Test":  # these functions don't need control board
             try:
                 self.text_console_logger("Connecting to OtO...")
                 self.test_suite.test_devices.add_device(new_object = otoSprinkler())
@@ -621,7 +619,7 @@ class MainWindow(tk.Tk):
                 self.turn_valve_button.configure(state = "normal")                           
                 if ResultList.test_status != None:
                     self.text_console_logger(display_message = ResultList.test_status[1:])
-        elif FunctionName in "Verify Valve Closes Fully Open Position Test Nozzle Rotation Test":  # must turn air on and off to run these commands
+        elif FunctionName in "Verify Valve Closes Fully Open Position Test":  # must turn air on and off to run these commands
             ResultList = self.test_suite.test_list[ButtonNumber].run_step(peripherals_list=self.test_suite.test_devices)  # Run selected test
             if not ResultList.is_passed:
                 self.status_labels[ButtonNumber].configure(bg = self.BAD_COLOUR, state = "normal")
@@ -704,7 +702,6 @@ class MainWindow(tk.Tk):
 
         if not self.USBCheck():
             self.text_console.configure(bg = self.IN_PROCESS_COLOUR)
-            self.text_console_logger("Too many USB cards attached for EOL test.")
             self.one_button_to_rule_them_all.configure(state = "normal")
             self.turn_valve_button.configure(state = "normal")
             return None
@@ -764,11 +761,14 @@ class MainWindow(tk.Tk):
         for port in PortList:
             if port.pid == USB_PID and port.vid == USB_VID:
                 OtOPortList.append(port.name)
-        if len(OtOPortList) > 1: # in case more than one USB card is plugged in, stop test
-            return False
-        else:
+        if len(OtOPortList) == 1:
             globalvars.PortName = OtOPortList[0]
             return True
+        elif len(OtOPortList) > 1:
+            self.text_console_logger("Too many USB cards attached for this test!")
+        else:
+            self.text_console_logger("No USB card found!")
+        return False
 
     def vac_interrupt(self):
         "checks vacuum switches are not triggered prior to testing"
