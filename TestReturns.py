@@ -28,7 +28,7 @@ class LogFileLocationError(Exception):
     pass
 
 class MainWindow(tk.Tk): 
-    ProgramVersion = "v1.1"
+    ProgramVersion = "v1.2"
     BAD_COLOUR = "RED"
     GOOD_COLOUR = "GREEN"
     IN_PROCESS_COLOUR = "YELLOW"
@@ -138,7 +138,7 @@ class MainWindow(tk.Tk):
             self.status_labels.append(temp)
             temp.grid(row = row_no, column = column_no, sticky = "EW", padx = int(40 * self.SCALEFACTOR), pady = int(4 * self.SCALEFACTOR))
 
-    def create_plot(self, window, plottype: str, xaxis, yaxis, size, name, clear):
+    def create_plot(self, window, plottype: str, xaxis, yaxis, size, name, clear, xtitle = None, ytitle = None):
         """creates a plot of type histogram, line, or polar in the plot frame"""
         self.clear_plot()
         plotit = False
@@ -146,11 +146,13 @@ class MainWindow(tk.Tk):
             figure = plt.figure(0, figsize = (self.FIGSIZEX, self.FIGSIZEY), dpi = self.DPI)
             sns.histplot(data = xaxis)
             plt.title(name)
+            plt.xlabel(xtitle)
             plotit = True
         elif plottype == "fohistplot":
             figure = plt.figure(2, figsize = (self.FIGSIZEX, self.FIGSIZEY), dpi = self.DPI)
             sns.histplot(data = xaxis)
             plt.title(name)
+            plt.xlabel(xtitle)
             plotit = True
         elif plottype == "lineplot":
             figure = plt.figure(1, figsize = (self.FIGSIZEX, self.FIGSIZEY), dpi = self.DPI)
@@ -159,6 +161,8 @@ class MainWindow(tk.Tk):
             else:
                 sns.lineplot(x = xaxis, y = yaxis)
             plt.title(name)
+            plt.xlabel(xtitle)
+            plt.ylabel(ytitle)
             plotit = True
         elif plottype == "polar":
             figure = plt.figure(3, figsize = (self.FIGSIZEX, self.FIGSIZEY), dpi = self.DPI)
