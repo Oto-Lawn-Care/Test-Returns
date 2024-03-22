@@ -299,8 +299,6 @@ class MainWindow(tk.Tk):
                 self.text_console_logger("Connecting to OtO ...")
                 new_oto = otoSprinkler()
                 self.test_suite.test_devices.add_device(new_object = new_oto)  # always reinitialize connection and create new sprinkler
-                self.textFirmware.insert(tk.END, self.test_suite.test_devices.DUTsprinkler.Firmware)
-                self.textFirmware.update()
                 # pull info from the EOL PCB. factoryLocation and 
                 self.test_suite.test_devices.DUTsprinkler.factoryLocation, self.test_suite.test_devices.DUTsprinkler.testFixtureName = self.test_suite.test_devices.gpioSuite.getBoardInfo()
             else:
