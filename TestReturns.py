@@ -28,7 +28,7 @@ class LogFileLocationError(Exception):
     pass
 
 class MainWindow(tk.Tk): 
-    ProgramVersion = "v1.2"
+    ProgramVersion = "v1.3"
     BAD_COLOUR = "RED"
     GOOD_COLOUR = "GREEN"
     IN_PROCESS_COLOUR = "YELLOW"
@@ -621,7 +621,7 @@ class MainWindow(tk.Tk):
                 self.turn_valve_button.configure(state = "normal")                           
                 if ResultList.test_status != None:
                     self.text_console_logger(display_message = ResultList.test_status[1:])
-        elif FunctionName in "Verify Valve Closes Fully Open Position Test":  # must turn air on and off to run these commands
+        elif FunctionName in "Check Solar Panel Fully Open Position Test":  # must turn air on and off to run these commands
             ResultList = self.test_suite.test_list[ButtonNumber].run_step(peripherals_list=self.test_suite.test_devices)  # Run selected test
             if not ResultList.is_passed:
                 self.status_labels[ButtonNumber].configure(bg = self.BAD_COLOUR, state = "normal")
@@ -637,8 +637,14 @@ class MainWindow(tk.Tk):
                     self.text_console_logger(display_message = ResultList.test_status[1:])
                 self.one_button_to_rule_them_all.configure(state = "normal")
                 self.turn_valve_button.configure(state = "normal")
-        elif FunctionName in "Check Solar Panel":
-            ResultList = self.test_suite.test_list[ButtonNumber].run_step(peripherals_list=self.test_suite.test_devices)  # Solar Panel Test
+        elif FunctionName in "Verify Valve Closes":
+            PauseTime = 17
+            ResultList = PressureCheck(name = "Zero Pressure Check", data_collection_time = 2.1, class_function= "EOL" , valve_target = None, parent = self).run_step(peripherals_list = self.test_suite.test_devices)
+            if ResultList.test_status != None:
+                self.text_console_logger(display_message = ResultList.test_status[1:])
+            self.text_console_logger(display_message = f"Waiting {PauseTime} seconds")
+            time.sleep(PauseTime)
+            ResultList = self.test_suite.test_list[ButtonNumber].run_step(peripherals_list=self.test_suite.test_devices)  # Verify Valve Closes
             if not ResultList.is_passed:
                 self.status_labels[ButtonNumber].configure(bg = self.BAD_COLOUR, state = "normal")
                 self.status_labels[ButtonNumber].update()

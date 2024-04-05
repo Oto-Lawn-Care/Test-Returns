@@ -996,13 +996,13 @@ class TestBattery(TestStep):
         except peripherals_list.DUTsprinkler.NoNVSException:
             v41calibration = None
         except Exception as f:  # board was not voltage calibrated
-            return TestBatteryResult(test_status = str(repr(f)), actual_voltage = battVoltage, step_start_time= startTime, pass_criteria = self.PASS_VOLTAGE)
+            return TestBatteryResult(test_status = str(f), actual_voltage = battVoltage, step_start_time= startTime, pass_criteria = self.PASS_VOLTAGE)
         battVoltage = round(float(peripherals_list.DUTMLB.get_voltages().battery_voltage_v), 3)
         peripherals_list.DUTsprinkler.batteryVoltage = battVoltage
         if battVoltage < self.PASS_VOLTAGE:
-            return TestBatteryResult(test_status = self.ERRORS.get("Low Battery") + f"({battVoltage}V)\n", actual_voltage = battVoltage, step_start_time= startTime, pass_criteria = self.PASS_VOLTAGE)
+            return TestBatteryResult(test_status = self.ERRORS.get("Low Battery") + f"({battVoltage}V), calibration value: {v41calibration}", actual_voltage = battVoltage, step_start_time= startTime, pass_criteria = self.PASS_VOLTAGE)
         elif battVoltage == 0:
-            return TestBatteryResult(test_status = self.ERRORS.get("No Reading"), actual_voltage = battVoltage, step_start_time = startTime, pass_criteria = self.PASS_VOLTAGE)
+            return TestBatteryResult(test_status = self.ERRORS.get("No Reading") + f", calibration value: {v41calibration}", actual_voltage = battVoltage, step_start_time = startTime, pass_criteria = self.PASS_VOLTAGE)
         return TestBatteryResult(test_status = f"±Battery: {battVoltage}V, calibration value: {v41calibration}", step_start_time = startTime, actual_voltage = battVoltage, pass_criteria = self.PASS_VOLTAGE)
 
 class TestBatteryResult(TestResult):
@@ -1624,8 +1624,10 @@ class ValveCalibration(TestStep):
 
         try:
             saved_MLB = int(peripherals_list.DUTMLB.get_valve_home_centidegrees().number) #this is abs
+            MLBValue = True
         except peripherals_list.DUTsprinkler.NoNVSException:
-            saved_MLB = None
+            saved_MLB = 0
+            MLBValue= False
         except Exception as e:
             return ValveCalibrationResult (test_status = str(e), step_start_time = start_time)
         calculated_offset = peripherals_list.DUTsprinkler.valveOffset # this is relative
@@ -1643,7 +1645,7 @@ class ValveCalibration(TestStep):
         peripherals_list.DUTsprinkler.ValvePeak1 = ValvePeak1
         peripherals_list.DUTsprinkler.ValvePeak2 = ValvePeak2
         self.parent.text_console_logger(f"Absolute Valve Closed: {valve_Offset/100}°, Open: {absolute_fully_open/100}°")
-        if saved_MLB != None:
+        if MLBValue:
             self.parent.text_console_logger(f"Valve offset difference from unit value: {(valve_Offset - saved_MLB)/100}°")
         else:
             self.parent.text_console_logger(f"Unit doesn't have a closed valve position in memory!")
