@@ -55,40 +55,6 @@ class TestPeripherals:
             import pyoto.otoProtocol.otoCommands as pyoto
             self.DUTMLB = pyoto.OtoInterface(pyoto.ConnectionType.UART, logger = None)
             self.DUTMLB.start_connection(port = globalvars.PortName, reset_on_connect = True)
-            try:
-                self.DUTsprinkler.UID = self.DUTMLB.get_account_id().string
-            except pyoto.NotInitializedException:
-                self.DUTsprinkler.UID = None
-            except pyoto.TooLongException:
-                self.DUTsprinkler.UID = ""
-            except Exception as e:
-                raise TypeError("Error reading UID from OtO!\n" + str(repr(e)))
-            if self.DUTsprinkler.UID != None:  # wifi will mess us up, let's remove the UID from the OtO
-                self.parent.text_console_logger(f"Removing UID, SSID {self.DUTsprinkler.UID}")
-                try:
-                    self.DUTsprinkler.valveOffset = self.DUTMLB.get_valve_home_centidegrees().number
-                except pyoto.NotInitializedException:
-                    self.DUTsprinkler.valveOffset = None
-                except pyoto.TooLongException:
-                    self.DUTsprinkler.valveOffset = ""
-                except Exception as e:
-                    raise TypeError("Error reading valve offset from OtO!\n" + str(repr(e)))
-                try:
-                    self.DUTsprinkler.nozzleOffset = self.DUTMLB.get_nozzle_home_centidegrees().number
-                except pyoto.NotInitializedException:
-                    self.DUTsprinkler.nozzleOffset = None
-                except pyoto.TooLongException:
-                    self.DUTsprinkler.nozzleOffset = ""
-                except Exception as e:
-                    raise TypeError("Error reading nozzle offset from OtO!\n" + str(repr(e)))
-                self.DUTMLB.reset_flash_constants()
-                self.DUTMLB.stop_connection()
-                self.DUTMLB.start_connection(port = globalvars.PortName, reset_on_connect = False)
-                self.parent.text_console_logger(f"Restoring offsets, valve: {self.DUTsprinkler.valveOffset/100}°, nozzle: {self.DUTsprinkler.nozzleOffset/100}°")
-                if self.DUTsprinkler.valveOffset != None:
-                    self.DUTMLB.set_valve_home_centidegrees(self.DUTsprinkler.valveOffset)
-                if self.DUTsprinkler.nozzleOffset != None:
-                    self.DUTMLB.set_nozzle_home_centidegrees(self.DUTsprinkler.nozzleOffset)
             self.DUTsprinkler.Firmware = self.DUTMLB.get_firmware_version().string
             self.parent.textFirmware.delete(1.0,tk.END)
             self.parent.textFirmware.insert(tk.END, self.DUTsprinkler.Firmware)
@@ -110,6 +76,36 @@ class TestPeripherals:
                 import pyoto2.otoProtocol.otoCommands as pyoto
                 self.DUTMLB = pyoto.OtoInterface(pyoto.ConnectionType.UART, logger = None)
                 self.DUTMLB.start_connection(port = globalvars.PortName, reset_on_connect = False)
+            try:
+                self.DUTsprinkler.UID = self.DUTMLB.get_account_id().string
+            except pyoto.NotInitializedException:
+                self.DUTsprinkler.UID = None
+            except pyoto.TooLongException:
+                self.DUTsprinkler.UID = ""
+            except Exception as e:
+                raise TypeError("Error reading UID from OtO!\n" + str(repr(e)))
+            if self.DUTsprinkler.UID != None:  # wifi will mess us up, let's remove the UID from the OtO
+                self.parent.text_console_logger(f"Removing UID, SSID {self.DUTsprinkler.UID}")
+                try:
+                    self.DUTsprinkler.valveOffset = self.DUTMLB.get_valve_home_centidegrees().number
+                except pyoto.NotInitializedException:
+                    self.DUTsprinkler.valveOffset = None
+                except Exception as e:
+                    raise TypeError("Error reading valve offset from OtO!\n" + str(repr(e)))
+                try:
+                    self.DUTsprinkler.nozzleOffset = self.DUTMLB.get_nozzle_home_centidegrees().number
+                except pyoto.NotInitializedException:
+                    self.DUTsprinkler.nozzleOffset = None
+                except Exception as e:
+                    raise TypeError("Error reading nozzle offset from OtO!\n" + str(repr(e)))
+                self.DUTMLB.reset_flash_constants()
+                self.DUTMLB.stop_connection()
+                self.DUTMLB.start_connection(port = globalvars.PortName, reset_on_connect = True)
+                self.parent.text_console_logger(f"Restoring offsets, valve: {self.DUTsprinkler.valveOffset/100}°, nozzle: {self.DUTsprinkler.nozzleOffset/100}°")
+                if self.DUTsprinkler.valveOffset != None:
+                    self.DUTMLB.set_valve_home_centidegrees(int(self.DUTsprinkler.valveOffset))
+                if self.DUTsprinkler.nozzleOffset != None:
+                    self.DUTMLB.set_nozzle_home_centidegrees(int(self.DUTsprinkler.nozzleOffset))
             self.DUTsprinkler.SubscribeFrequency = pyoto.SensorSubscribeFrequencyEnum.SENSOR_SUBSCRIBE_FREQUENCY_100Hz
             self.DUTsprinkler.SlowerSubscribeFrequency = pyoto.SensorSubscribeFrequencyEnum.SENSOR_SUBSCRIBE_FREQUENCY_10Hz
             self.DUTsprinkler.NoNVSException = pyoto.NotInitializedException
