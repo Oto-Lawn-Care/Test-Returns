@@ -1453,6 +1453,7 @@ class ValveCalibration(TestStep):
 
         Recording = False
         FlipFirst = False
+        PressureError = False
 
         while (timeit.default_timer() - start_time) <= self.TIMEOUT and not RotationComplete:
             ValveCurrent.extend([round(float(peripherals_list.DUTMLB.get_currents().valve_current_mA), 3)])
@@ -1493,6 +1494,7 @@ class ValveCalibration(TestStep):
                         else:
                             TotalTravel = TotalTravel + CurrentValvePosition - PreviousValvePosition
                         if TotalTravel >= self.MaxAngleBeforeShutoff:
+                            PressureError = True
                             RotationComplete = True
 
         peripherals_list.gpioSuite.airSolenoidPin.set(1)  #turn off air
@@ -1518,8 +1520,11 @@ class ValveCalibration(TestStep):
         Info = ([f"Unit Name: {UnitName}", f"Test Time: {Date_Time}" , f"BOM Number: {bom_Number}"])
         Info_DF = pd.DataFrame(Info)
         
-        if not valve_calibration_data: 
-            return ValveCalibrationResult (test_status = self.ERRORS.get("EmptyList"), step_start_time = start_time)
+        if not valve_calibration_data:
+            if PressureError:
+                return ValveCalibrationResult (test_status = f"Pressure reading did not fall below {ADCtokPA(self.TurnRecordingOn)} kPa", step_start_time = start_time)
+            else:
+                return ValveCalibrationResult (test_status = self.ERRORS.get("EmptyList"), step_start_time = start_time)
 
         if UnitName != "":
             file_path = EstablishLoggingLocation(name = "CollectRawDataWithSubscribe", folder_name = "Valve Calibrate", date_time = Date_Time, parent = self.parent).run_step(peripherals_list=peripherals_list).file_path
