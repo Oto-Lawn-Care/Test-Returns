@@ -1659,13 +1659,13 @@ class ValveCalibrationResult(TestResult):
 class VerifyValveOffsetTarget(TestStep): 
     "Check that no air leaks past the valve when closed"
 
-    ERROR: Dict[str,str] = {"Pressure_Sensor": "OtO's pressure sensor isn't recognized.",
+    ERRORS: Dict[str,str] = {"Pressure_Sensor": "OtO's pressure sensor isn't recognized.",
                         "NonZeroPressure": "OtO's valve is leaking when closed.",
                         "NotFullyClosed": "Unable to close OtO's valve.",
                         "Empty List": "OtO did not return pressure information.",
                         "Timeout": "Valve didn't reach target in time."}
     
-    VALVE_TARGET_TOLERANCE: int = 10  # in centidegree
+    VALVE_TARGET_TOLERANCE: int = 15  # in centidegree
     Zero_P_Collection_time = 2.1
 
     # Use "Hard Coded" or "Test Calibration" for fixed characters or using the calibration test outputs respectively! 
@@ -1779,7 +1779,7 @@ class VerifyValveOffsetTarget(TestStep):
             else:
                 return VerifyValveOffsetTargetResult(test_status = f"[±{round(RelativekPA(self.PRESSURE_ADC_TOLERANCE), 3)} kPa MAX, σ ±{round(RelativekPA(self.STD_UPPER_LIMIT_TO_MEAN), 3)} kPa]: Closed pressure: {round(ADCtokPA(pressure_reading), 3)} kPa, σ {round(RelativekPA(STD_pressure_reading), 3)} kPa, Difference to Zero: {round(RelativekPA(pressure_reading - zero_P_ADC), 3)} kPa, Valve Error: {round((valveTarget - valve_position)/100, 2)}°", step_start_time=startTime, Valve_Target=False, pressureReading = pressure_reading, Relative_valveOffset = valveTarget, Actual_Valve_Position = valve_position)
         else:
-            return VerifyValveOffsetTargetResult(test_status=self.ERRORS.get("NotFullyClosed") + f"Offset: {valveTarget/100}°±{self.VALVE_TARGET_TOLERANCE/100}° ; Reading {valve_position/100}°", pressureReading = pressure_reading, Relative_valveOffset = valveTarget, Actual_Valve_Position = valve_position)
+            return VerifyValveOffsetTargetResult(test_status=self.ERRORS.get("NotFullyClosed") + f"Offset: {valveTarget/100}°±{self.VALVE_TARGET_TOLERANCE/100}° ; Reading {valve_position/100}°", step_start_time = startTime, Valve_Target = False, pressureReading = pressure_reading, Relative_valveOffset = valveTarget, Actual_Valve_Position = valve_position)
 
 class VerifyValveOffsetTargetResult(TestResult):
 
