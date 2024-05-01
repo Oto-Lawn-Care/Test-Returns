@@ -1366,7 +1366,7 @@ class TestSolar(TestStep):
         peripherals_list.gpioSuite.ledPanelPin.set(1)  #turn off LED
 
         if "-v" not in peripherals_list.DUTsprinkler.Firmware:
-            TestStatus = f"FIRMWARE DOESN'T HAVE HARDWARE IDENTIFIER -v?\nCan't tell if current should be available.\n{solarCurrent}mA, {solarVoltage}V")
+            TestStatus = f"FIRMWARE DOESN'T HAVE HARDWARE IDENTIFIER -v?\nCan't tell if current should be available.\n{solarCurrent}mA, {solarVoltage}V"
             return TestSolarResult(test_status = TestStatus, step_start_time = startTime, pass_criteria = self.PASS_CURRENT, actual_current = solarCurrent, actual_voltage = solarVoltage)
         elif "-v4" in peripherals_list.DUTsprinkler.Firmware or "-v5" in peripherals_list.DUTsprinkler.Firmware:
             if self.PASS_CURRENT <= solarCurrent <= self.MAX_CURRENT:
