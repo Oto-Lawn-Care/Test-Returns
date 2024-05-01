@@ -38,7 +38,7 @@ class TestPeripherals:
                 raise TypeError("UNEXPECTED PROGRAM ERROR!")
 
     def add_device(self, new_object):
-        "adds a new OtOSprinkler, GPIOSuite or I2CSuite class to TestPeriperals"
+        "adds a new OtOSprinkler, GPIOSuite or I2CSuite class to TestPeriperals. Adding an OtOSprinkler will connect to the OtO to determine PyOtO version, remove SSID if it exists to prevent errors."
         if isinstance(new_object, otoSprinkler):
             self.DUTsprinkler = new_object
             # first remove PyOtO 2 from the module path sys.path, if it exists
@@ -386,7 +386,7 @@ class GetUnitNameResult(TestResult):
     def __init__(self, test_status, step_start_time):
         super().__init__(test_status, step_start_time)
 
-class NozzleRotationTestWithSubscribe(TestStep): 
+class NozzleRotationTestWithSubscribe(TestStep):
     ERRORS: Dict[str,str] = {"Timeout_V": "Valve didn't reach target position in time.",
                             "Timeout_N": "Nozzle didn't reach target position in time.",
                             "Rotation_Rate": "Nozzle did not rotate at the correct speed.",
@@ -433,7 +433,15 @@ class NozzleRotationTestWithSubscribe(TestStep):
             peripherals_list.DUTsprinkler.nozzleRotationSTD = round(measured_STD/100, 2)
             MotorCurrentFail = False
             NoCurrentAvailable = False
-            if "-v3" not in peripherals_list.DUTsprinkler.Firmware:
+            if "-v" not in peripherals_list.DUTsprinkler.Firmware:
+                self.parent.text_console_logger(f"FIRMWARE DOESN'T HAVE HARDWARE IDENTIFIER -v?, can't tell if current should be available.")
+                if peripherals_list.DUTsprinkler.NozzleCurrentAve > self.MAXNMotorCurrent or peripherals_list.DUTsprinkler.NozzleCurrentAve < self.MINNMotorCurrent:
+                    self.parent.text_console_logger(f"Nozzle motor current out of range! {self.MINNMotorCurrent}-{self.MAXNMotorCurrent}mA. Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, σ {round(measured_STD/100, 2)}°/sec, motor {peripherals_list.DUTsprinkler.NozzleCurrentAve} mA, STD {peripherals_list.DUTsprinkler.NozzleCurrentSTD} mA")
+                    MotorCurrentFail = True
+                if peripherals_list.DUTsprinkler.NozzleCurrentSTD > self.MAXNMotorCurrentSTD or peripherals_list.DUTsprinkler.NozzleCurrentSTD < self.MINNMotorCurrentSTD:
+                    self.parent.text_console_logger(f"Nozzle motor current variation too large! {self.MINNMotorCurrent}-{self.MAXNMotorCurrent}mA\nNozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, σ {round(measured_STD/100, 2)}°/sec, motor {peripherals_list.DUTsprinkler.NozzleCurrentAve} mA, STD {peripherals_list.DUTsprinkler.NozzleCurrentSTD} mA")
+                    MotorCurrentFail = True
+            elif "-v3" not in peripherals_list.DUTsprinkler.Firmware:
                 if peripherals_list.DUTsprinkler.NozzleCurrentAve > self.MAXNMotorCurrent or peripherals_list.DUTsprinkler.NozzleCurrentAve < self.MINNMotorCurrent:
                     self.parent.text_console_logger(f"Nozzle motor current out of range! {self.MINNMotorCurrent}-{self.MAXNMotorCurrent}mA. Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, σ {round(measured_STD/100, 2)}°/sec, motor {peripherals_list.DUTsprinkler.NozzleCurrentAve} mA, STD {peripherals_list.DUTsprinkler.NozzleCurrentSTD} mA")
                     MotorCurrentFail = True
@@ -492,7 +500,7 @@ class NozzleRotationTestWithSubscribe(TestStep):
             measured_STD = float(dataPointsWithFailureCount.get("Measured_STD"))
             peripherals_list.DUTsprinkler.nozzleRotationAve = round(measured_average_speed/100, 2)
             peripherals_list.DUTsprinkler.nozzleRotationSTD = round(measured_STD/100, 2)
-            if "-v3" not in peripherals_list.DUTsprinkler.Firmware:
+            if not NoCurrentAvailable:
                 self.parent.text_console_logger(f"Nozzle motor current: {peripherals_list.DUTsprinkler.NozzleCurrentAve} mA, σ {peripherals_list.DUTsprinkler.NozzleCurrentSTD} mA")
             if self.MINRotationSpeed <= measured_average_speed <= self.MAXRotationSpeed and nozzle_rotation_test_Max_STD_failure == False and nozzle_rotation_test_Min_STD_failure == False:
                 return NozzleRotationTestWithSubscribeResult(test_status = f"±Nozzle Rotation Speed: {round(measured_average_speed/100, 2)}°/sec, σ {round(measured_STD/100, 2)}°/sec", step_start_time = startTime, Friction_Points = nozzle_rotation_test_failure_count, Nozzle_Rotation_Data = Nozzle_Rotation_Test_Data)
@@ -1078,7 +1086,9 @@ class TestExternalPower(TestStep):
             self.PASS_CURRENT = 0.00
             self.PASS_CURRENTv4 = 0.03
         
-        if "-v4" in peripherals_list.DUTsprinkler.Firmware or "-v5" in peripherals_list.DUTsprinkler.Firmware:
+        if "-v" not in peripherals_list.DUTsprinkler.Firmware:
+            return TestExternalPowerResult(test_status = f"FIRMWARE DOESN'T HAVE HARDWARE IDENTIFIER -v?\nCan't tell if current or voltage should be available.\n{chargingCurrent}A, {chargingVoltage}V" , step_start_time = startTime, pass_criteria = (self.PASS_VOLTAGE, self.PASS_CURRENTv4), actual_readings = (chargingVoltage, chargingCurrent))
+        elif "-v4" in peripherals_list.DUTsprinkler.Firmware or "-v5" in peripherals_list.DUTsprinkler.Firmware:
             if self.PASS_CURRENTv4 <= chargingCurrent <= self.MAX_CURRENTv4:
                 return TestExternalPowerResult(test_status = f"±Charging: {chargingCurrent}A" , step_start_time = startTime, pass_criteria = (self.PASS_VOLTAGE, self.PASS_CURRENTv4), actual_readings = (chargingVoltage, chargingCurrent))
             elif chargingCurrent < self.PASS_CURRENTv4:
@@ -1089,9 +1099,9 @@ class TestExternalPower(TestStep):
             if self.PASS_VOLTAGE <= chargingVoltage <= self.MAX_VOLTAGE:
                 return TestExternalPowerResult(test_status = f"±Charging: {chargingVoltage}V" , step_start_time = startTime, pass_criteria = (self.PASS_VOLTAGE, self.PASS_CURRENTv4), actual_readings = (chargingVoltage, chargingCurrent))
             elif chargingVoltage < self.PASS_VOLTAGE:
-                return TestExternalPowerResult(test_status = self.ERRORS.get("Voltage Below") + f"[{self.PASS_VOLTAGE}A]: {chargingVoltage}V", step_start_time = startTime, pass_criteria = (self.PASS_VOLTAGE, self.PASS_CURRENTv4), actual_readings = (chargingVoltage, chargingCurrent))
+                return TestExternalPowerResult(test_status = self.ERRORS.get("Voltage Below") + f"[{self.PASS_VOLTAGE}V]: {chargingVoltage}V", step_start_time = startTime, pass_criteria = (self.PASS_VOLTAGE, self.PASS_CURRENTv4), actual_readings = (chargingVoltage, chargingCurrent))
             elif chargingVoltage > self.MAX_VOLTAGE:
-                return TestExternalPowerResult(test_status = self.ERRORS.get("Voltage Above") + f"[{self.MAX_VOLTAGE}A]: {chargingVoltage}V", step_start_time = startTime, pass_criteria = (self.PASS_VOLTAGE, self.PASS_CURRENTv4), actual_readings = (chargingVoltage, chargingCurrent))
+                return TestExternalPowerResult(test_status = self.ERRORS.get("Voltage Above") + f"[{self.MAX_VOLTAGE}V]: {chargingVoltage}V", step_start_time = startTime, pass_criteria = (self.PASS_VOLTAGE, self.PASS_CURRENTv4), actual_readings = (chargingVoltage, chargingCurrent))
 
 class TestExternalPowerResult(TestResult):
     def __init__(self, actual_readings: tuple[float,float], pass_criteria: tuple[float,float], test_status, step_start_time):
@@ -1223,7 +1233,10 @@ class TestPump(TestStep):
         Firmware = peripherals_list.DUTsprinkler.Firmware
 
         NoCurrentAvailable = False
-        if not "-v4" in Firmware and not "-v5" in Firmware:
+        if not "-v" in Firmware:
+            self.parent.text_console_logger(f"FIRMWARE DOESN'T HAVE HARDWARE IDENTIFIER -v?, can't tell if current should be available.")
+            UseSubscribe = False
+        elif not "-v4" in Firmware and not "-v5" in Firmware:
             UseSubscribe = False
             NoCurrentAvailable = True
         elif Firmware < "v3":
@@ -1309,7 +1322,7 @@ class TestPump(TestStep):
                 peripherals_list.DUTsprinkler.Pump3CurrentAve = round(float(np.average(PumpCurrent)), 1)
                 peripherals_list.DUTsprinkler.Pump3CurrentSTD = round(float(np.std(PumpCurrent)), 2)
 
-            if "-v3" not in peripherals_list.DUTsprinkler.Firmware:
+            if "-v3" not in Firmware:
                 if round(float(np.average(PumpCurrent)), 1) == 0:
                     return TestPumpResult(test_status = f"Pump {self.target_pump} did not run. Pump current: {round(float(np.average(PumpCurrent)), 1)} mA, STD {round(float(np.std(PumpCurrent)), 2)}", step_start_time = startTime, pass_criteria = self.PASS_TIME)
                 elif round(float(np.average(PumpCurrent)), 1) > 600:
@@ -1351,7 +1364,11 @@ class TestSolar(TestStep):
         peripherals_list.DUTsprinkler.solarCurrent = solarCurrent
         peripherals_list.DUTsprinkler.solarVoltage = solarVoltage
         peripherals_list.gpioSuite.ledPanelPin.set(1)  #turn off LED
-        if "-v4" in peripherals_list.DUTsprinkler.Firmware or "-v5" in peripherals_list.DUTsprinkler.Firmware:
+
+        if "-v" not in peripherals_list.DUTsprinkler.Firmware:
+            TestStatus = f"FIRMWARE DOESN'T HAVE HARDWARE IDENTIFIER -v?\nCan't tell if current should be available.\n{solarCurrent}mA, {solarVoltage}V")
+            return TestSolarResult(test_status = TestStatus, step_start_time = startTime, pass_criteria = self.PASS_CURRENT, actual_current = solarCurrent, actual_voltage = solarVoltage)
+        elif "-v4" in peripherals_list.DUTsprinkler.Firmware or "-v5" in peripherals_list.DUTsprinkler.Firmware:
             if self.PASS_CURRENT <= solarCurrent <= self.MAX_CURRENT:
                 return TestSolarResult(test_status = f"±Solar Panel {solarCurrent}mA", step_start_time = startTime, pass_criteria = self.PASS_CURRENT, actual_current = solarCurrent, actual_voltage = 0)
             elif solarCurrent >= self.MAX_CURRENT:
@@ -1535,7 +1552,9 @@ class ValveCalibration(TestStep):
         
         peripherals_list.DUTsprinkler.valveRawData = valve_calibration_data
 
-        if "-v4" in peripherals_list.DUTsprinkler.Firmware or "-v5" in peripherals_list.DUTsprinkler.Firmware:
+        if "-v" not in peripherals_list.DUTsprinkler.Firmware:
+            self.parent.text_console_logger(f"FIRMWARE DOESN'T HAVE HARDWARE IDENTIFIER -v?\nCan't tell if current should be available.\n{peripherals_list.DUTsprinkler.ValveCurrentAve} mA, σ {peripherals_list.DUTsprinkler.ValveCurrentSTD} mA")
+        elif "-v4" in peripherals_list.DUTsprinkler.Firmware or "-v5" in peripherals_list.DUTsprinkler.Firmware:
             self.parent.text_console_logger(f"Valve Motor {peripherals_list.DUTsprinkler.ValveCurrentAve} mA, σ {peripherals_list.DUTsprinkler.ValveCurrentSTD} mA")
 
         pressure_sensor_check = peripherals_list.DUTMLB.get_pressure_sensor_version().pressure_sensor_version
