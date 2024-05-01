@@ -396,10 +396,10 @@ class NozzleRotationTestWithSubscribe(TestStep):
                             "IDK": "Unexpected error during nozzle rotation!",
                             "Max_STD" : "Nozzle speed variation was too large.",
                             "Min_STD" : "Nozzle speed variation was unusually small."}
-    TIMEOUT = 25 # in sec
-    Nozzle_Duty_Cycle = 30  # % of full
-    MAXRotationSpeed: int = 3943  # Mar 2411 data 3943
-    MINRotationSpeed: int = 2900  # Mar 2411 data 2900
+    TIMEOUT = 55 # in sec
+    Nozzle_Duty_Cycle = 100  # % of full
+    MAXRotationSpeed: int = 1608  # Mar 2411 data 3943
+    MINRotationSpeed: int = 1182  # Mar 2411 data 2900
     Nozzle_Speed = (MAXRotationSpeed + MINRotationSpeed) * 0.5  # centidegrees / sec
     Max_STD = 383  # 2411 data 383
     Min_STD = 56  # 2411 data 56
@@ -479,6 +479,10 @@ class NozzleRotationTestWithSubscribe(TestStep):
             self.parent.text_console_logger(self.ERRORS.get("Backwards"))
         else:
             self.parent.text_console_logger(self.ERRORS.get("IDK"))
+
+        NoCurrentAvailable = False
+        if "-v3" in peripherals_list.DUTsprinkler.Firmware:
+            NoCurrentAvailable = True
 
         # End of line based method failed, try again with speed target
         self.parent.text_console_logger(f"Trying nozzle rotation again with speed target {self.Nozzle_Speed/100}°/sec...")
@@ -977,7 +981,8 @@ class SendNozzleHome(TestStep):
                 peripherals_list.DUTMLB.set_nozzle_duty(0, 0)
                 return SendNozzleHomeResult(test_status = f"Nozzle didn't rotate home!!! Nozzle Home Position: {saved_MLB/100}°", step_start_time = startTime, N_Offset_calc = saved_MLB)
             else:
-                return SendNozzleHomeResult(test_status = f"±Nozzle Home Position: {saved_MLB/100}°", step_start_time = startTime, N_Offset_calc = saved_MLB)
+                self.parent.text_console_logger(f"Actual nozzle position is {peripherals_list.DUTMLB.get_sensors().nozzle_position_centideg/100}°")
+                return SendNozzleHomeResult(test_status = f"±Nozzle Absolute Home Position: {saved_MLB/100}°", step_start_time = startTime, N_Offset_calc = saved_MLB)
 
 class SendNozzleHomeResult(TestResult):
     def __init__(self, test_status: Union[str, None], step_start_time: float, N_Offset_calc: int):
@@ -1139,7 +1144,7 @@ class TestMoesFullyOpen(TestStep):
         Repeats = 1  # current count of trials
         try:
             saved_MLB = int(peripherals_list.DUTMLB.get_valve_home_centidegrees().number) #this is abs
-            valve_Offset = saved_MLB
+            valve_offset = saved_MLB
             self.parent.text_console_logger(f"Current valve offset is {saved_MLB/100}°")
         except peripherals_list.DUTsprinkler.NoNVSException:
             return TestMoesFullyOpenResult(test_status = str("OtO does not have a valve offsest!"), step_start_time = startTime)
@@ -1179,10 +1184,10 @@ class TestMoesFullyOpen(TestStep):
             SigmaSpan = abs(peripherals_list.DUTsprinkler.valveFullyOpen1STD - peripherals_list.DUTsprinkler.valveFullyOpen3STD)
             if abs(Span) < SpanTolerance and SigmaSpan < SigmaSpanTolerance:
                 ReturnMessage = peripherals_list.DUTMLB.set_valve_position(wait_for_complete = False, valve_position_centideg = 90000)
-                if abs(valve_Offset - saved_MLB) <= 200:
+                if abs(valve_offset - saved_MLB) <= 200:
                     return TestMoesFullyOpenResult(test_status = f"±Closed position OK!, Difference: {round(RelativekPA(Span), 3)} kPa, σ difference: {RelativekPA(SigmaSpan)} kPa", step_start_time = startTime)
                 else:
-                    return TestMoesFullyOpenResult(test_status = f"Failed Closed Position!, Difference: {abs(valve_Offset-saved_MLB)}°", step_start_time = startTime)
+                    return TestMoesFullyOpenResult(test_status = f"Failed Closed Position!, Difference: {abs(valve_offset-saved_MLB)}°", step_start_time = startTime)
             else:
                 DeltaAngle = int(np.sign(Span) * -100 * math.sqrt(abs(Span)) / AdjustmentFactor)
                 if Repeats == 2:  # invert the difference since the positions are opposite for 2nd repeat
@@ -1193,8 +1198,8 @@ class TestMoesFullyOpen(TestStep):
                     DeltaAngle = -200
                 if DeltaAngle < 0:
                     DeltaAngle = 36000 + DeltaAngle
-                valve_Offset = (DeltaAngle + saved_MLB + PretendChangeAmount) % 36000 # this makes it absolute
-                self.parent.text_console_logger(f"Revised Valve Postion: {valve_Offset/100}°")
+                valve_offset = (DeltaAngle + saved_MLB + PretendChangeAmount) % 36000 # this makes it absolute
+                self.parent.text_console_logger(f"Revised Valve Postion: {valve_offset/100}°")
                 PretendChangeAmount = PretendChangeAmount + DeltaAngle
                 Repeats += 1
         ReturnMessage = peripherals_list.DUTMLB.set_valve_position(wait_for_complete = False, valve_position_centideg = 9000)
@@ -1400,7 +1405,7 @@ class ValveCalibration(TestStep):
 
     ERRORS: dict = {"EmptyList": "No valve rotation values were received from OtO.",
                     "BackwardRotation": "Valve rotating backwards!"}
-    VALVE_ROTATION_DUTY_CYCLE = 90
+    VALVE_ROTATION_DUTY_CYCLE = 24
     TurnRecordingOn = 1920000  # Turn recording on when ADC pressure value is below this value.
     MaxAngleBeforeShutoff = 12000  # how far to rotate before pressure must have dropped below TurnRecordingOn value
     MaxPeakDifference = 91000  # maximum ADC pressure difference between the two peaks per 2411 data
@@ -1440,6 +1445,7 @@ class ValveCalibration(TestStep):
         ValveCurrent = []
         ValvePositionData = []
         TotalTravel = 0
+        self.MaxDifference = 3  # max difference from current offset ±180
 
         peripherals_list.DUTMLB.use_moving_average_filter(True)
         CurrentValvePosition = int(peripherals_list.DUTMLB.get_sensors().valve_position_centideg)
@@ -1483,12 +1489,12 @@ class ValveCalibration(TestStep):
                     if CurrentValvePosition < PreviousValvePosition:  # either rotating backwards or passed 360°
                         if np.sin(np.pi*PreviousValvePosition/18000) < 0:  # sine should be negative in previous position if passing 360°
                             FlipFirst = False
-                        else:  # if sine is positive and previous is greater than current position, the valve is turning backward so shut down data collection and rotation on the OtO, then error out.
+                        elif PreviousValvePosition - CurrentValvePosition > 12:  # if sine is positive and previous is greater than current position, the valve is turning backward so shut down data collection and rotation on the OtO, then error out.
                             peripherals_list.gpioSuite.airSolenoidPin.set(1)  #turn off air
                             peripherals_list.DUTMLB.set_sensor_subscribe(subscribe_frequency = peripherals_list.DUTsprinkler.SubscribeOff)
                             peripherals_list.DUTMLB.clear_incoming_packet_log()
                             peripherals_list.DUTMLB.set_valve_duty(duty_cycle = 0, direction = 0)
-                            return ValveCalibrationResult(test_status = self.ERRORS.get("BackwardRotation"), step_start_time = start_time)
+                            return ValveCalibrationResult(test_status = self.ERRORS.get("BackwardRotation") + str(PreviousValvePosition - CurrentValvePosition), step_start_time = start_time)
                     else:
                         if not FlipFirst and CurrentValvePosition >= StartPosition:
                             RotationComplete = True
@@ -1579,7 +1585,7 @@ class ValveCalibration(TestStep):
         
         self.parent.create_plot(window = self.parent.GraphHolder, plottype = "lineplot", xaxis = ValvePositionData, yaxis = kPaPressure, ytitle = "kPa", size = 12, name = "Valve Calibration", clear = False)
 
-        sos = signal.butter(N = 2, Wn = 0.6, btype = "lowpass", output = "sos", fs = SamplingFrequency)
+        sos = signal.butter(N = 2, Wn = 1.1, btype = "lowpass", output = "sos", fs = SamplingFrequency)
         FinalPressure = signal.sosfiltfilt(sos, x = PressureData, padtype = "odd", padlen = 50)
 
         kPaFinalPressure.clear()
@@ -1651,24 +1657,29 @@ class ValveCalibration(TestStep):
         except Exception as e:
             return ValveCalibrationResult (test_status = str(e), step_start_time = start_time)
         calculated_offset = peripherals_list.DUTsprinkler.valveOffset # this is relative
-        valve_Offset = (saved_MLB + calculated_offset + 35900) % 36000 # this makes it absolute, adjust for lag by -1°
-        absolute_fully_open = (int(valve_Offset) + 9000) % 36000
+        valve_offset = (saved_MLB + calculated_offset + 35900) % 36000 # this makes it absolute, adjust for lag by -1°
+        absolute_fully_open = (int(valve_offset) + 9000) % 36000
         Peak1Angle = (int(saved_MLB + main2peaks_position[0]) % 36000)/100
         Peak2Angle = (int(saved_MLB + main2peaks_position[1]) % 36000)/100
         ValvePeak1 = int(first_peak)
         ValvePeak2 = int(second_peak)
         self.parent.text_console_logger(f"Absolute Peak 1: {Peak1Angle}°, {round(ADCtokPA(ValvePeak1), 3)} kPa, Peak 2: {Peak2Angle}°, {round(ADCtokPA(ValvePeak2), 3)} kPa")
-        peripherals_list.DUTsprinkler.valveOffset = int(valve_Offset)
+        peripherals_list.DUTsprinkler.valveOffset = int(valve_offset)
         peripherals_list.DUTsprinkler.valveFullyOpen = int(absolute_fully_open)
         peripherals_list.DUTsprinkler.Peak1Angle = Peak1Angle
         peripherals_list.DUTsprinkler.Peak2Angle = Peak2Angle
         peripherals_list.DUTsprinkler.ValvePeak1 = ValvePeak1
         peripherals_list.DUTsprinkler.ValvePeak2 = ValvePeak2
-        self.parent.text_console_logger(f"Absolute Valve Closed: {valve_Offset/100}°, Open: {absolute_fully_open/100}°")
+        self.parent.text_console_logger(f"Absolute Valve Closed: {valve_offset/100}°, Open: {absolute_fully_open/100}°")
         if MLBValue:
-            self.parent.text_console_logger(f"Valve offset difference from unit value: {(valve_Offset - saved_MLB)/100}°")
+            MLBDifference = (valve_offset - saved_MLB)/100
+            self.parent.text_console_logger(f"Valve offset difference from unit value: {MLBDifference}°")
+            if abs(MLBDifference) > 90:
+                MLBDifference = abs(MLBDifference) - 180
+            if abs(MLBDifference) > self.MaxDifference:
+                return ValveCalibrationResult (test_status = f"Valve Offset different by more than {self.MaxDifference}°", step_start_time = start_time)
         else:
-            self.parent.text_console_logger(f"Unit doesn't have a closed valve position in memory!")
+            return ValveCalibrationResult (test_status = "Unit doesn't have a closed valve position in memory!", step_start_time = start_time)
         return ValveCalibrationResult (test_status = None, step_start_time = start_time)
 
 class ValveCalibrationResult(TestResult):
