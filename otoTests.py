@@ -1187,7 +1187,7 @@ class TestMoesFullyOpen(TestStep):
                 if abs(valve_offset - saved_MLB) <= 200:
                     return TestMoesFullyOpenResult(test_status = f"±Closed position OK!, Difference: {round(RelativekPA(Span), 3)} kPa, σ difference: {RelativekPA(SigmaSpan)} kPa", step_start_time = startTime)
                 else:
-                    return TestMoesFullyOpenResult(test_status = f"Failed Closed Position!, Difference: {abs(valve_offset-saved_MLB)}°", step_start_time = startTime)
+                    return TestMoesFullyOpenResult(test_status = f"Failed Closed Position!, Difference: {abs(valve_offset-saved_MLB)/100}°", step_start_time = startTime)
             else:
                 DeltaAngle = int(np.sign(Span) * -100 * math.sqrt(abs(Span)) / AdjustmentFactor)
                 if Repeats == 2:  # invert the difference since the positions are opposite for 2nd repeat
@@ -1405,7 +1405,7 @@ class ValveCalibration(TestStep):
 
     ERRORS: dict = {"EmptyList": "No valve rotation values were received from OtO.",
                     "BackwardRotation": "Valve rotating backwards!"}
-    VALVE_ROTATION_DUTY_CYCLE = 24
+    VALVE_ROTATION_DUTY_CYCLE = 30
     TurnRecordingOn = 1920000  # Turn recording on when ADC pressure value is below this value.
     MaxAngleBeforeShutoff = 12000  # how far to rotate before pressure must have dropped below TurnRecordingOn value
     MaxPeakDifference = 91000  # maximum ADC pressure difference between the two peaks per 2411 data
@@ -1585,8 +1585,9 @@ class ValveCalibration(TestStep):
         
         self.parent.create_plot(window = self.parent.GraphHolder, plottype = "lineplot", xaxis = ValvePositionData, yaxis = kPaPressure, ytitle = "kPa", size = 12, name = "Valve Calibration", clear = False)
 
-        sos = signal.butter(N = 2, Wn = 1.1, btype = "lowpass", output = "sos", fs = SamplingFrequency)
-        FinalPressure = signal.sosfiltfilt(sos, x = PressureData, padtype = "odd", padlen = 50)
+        # sos = signal.butter(N = 1, Wn = [0.03, 3], btype = "bandpass", output = "sos", fs = SamplingFrequency)
+        sos = signal.butter(N = 1, Wn = 6, btype = "lowpass", output = "sos", fs = SamplingFrequency)
+        FinalPressure = signal.sosfiltfilt(sos, x = PressureData, padtype = "odd", padlen = 10)
 
         kPaFinalPressure.clear()
         for i in FinalPressure:
@@ -1657,7 +1658,7 @@ class ValveCalibration(TestStep):
         except Exception as e:
             return ValveCalibrationResult (test_status = str(e), step_start_time = start_time)
         calculated_offset = peripherals_list.DUTsprinkler.valveOffset # this is relative
-        valve_offset = (saved_MLB + calculated_offset + 35900) % 36000 # this makes it absolute, adjust for lag by -1°
+        valve_offset = (saved_MLB + calculated_offset + 35400) % 36000 # this makes it absolute, adjust for lag by -6°
         absolute_fully_open = (int(valve_offset) + 9000) % 36000
         Peak1Angle = (int(saved_MLB + main2peaks_position[0]) % 36000)/100
         Peak2Angle = (int(saved_MLB + main2peaks_position[1]) % 36000)/100
