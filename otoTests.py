@@ -1579,8 +1579,8 @@ class ValveCalibration(TestStep):
         
         self.parent.create_plot(window = self.parent.GraphHolder, plottype = "lineplot", xaxis = ValvePositionData, yaxis = kPaPressure, ytitle = "kPa", size = 12, name = "Valve Calibration", clear = False)
 
-        sos = signal.butter(N = 2, Wn = 0.6, btype = "lowpass", output = "sos", fs = SamplingFrequency)
-        FinalPressure = signal.sosfiltfilt(sos, x = PressureData, padtype = "odd", padlen = 50)
+        sos = signal.butter(N = 1, Wn = 6, btype = "lowpass", output = "sos", fs = SamplingFrequency)
+        FinalPressure = signal.sosfiltfilt(sos, x = PressureData, padtype = "odd", padlen = 10)
 
         kPaFinalPressure.clear()
         for i in FinalPressure:
