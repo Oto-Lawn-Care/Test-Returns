@@ -12,7 +12,6 @@ import pathlib
 from scipy import signal
 from scipy.signal import find_peaks
 from otoSprinkler import otoSprinkler
-import pathlib
 import numpy as np
 import math
 import tkinter as tk
@@ -1588,8 +1587,11 @@ class ValveCalibration(TestStep):
         
         self.parent.create_plot(window = self.parent.GraphHolder, plottype = "lineplot", xaxis = ValvePositionData, yaxis = kPaPressure, ytitle = "kPa", size = 12, name = "Valve Calibration", clear = False)
 
-        sos = signal.butter(N = 1, Wn = 1.5, btype = "lowpass", output = "sos", fs = SamplingFrequency)
-        FinalPressure = signal.sosfiltfilt(sos, x = PressureData, padtype = "odd", padlen = 10)
+        sos = signal.butter(N = 1, Wn = 0.5, btype = "lowpass", output = "sos", fs = SamplingFrequency)
+        FinalPressure = signal.sosfiltfilt(sos, x = PressureData, padtype = "odd", padlen = 40)  # filter pressure data
+        # scale pressure data to line up filtered peaks closer to actual peaks
+        zero = min(FinalPressure)
+        FinalPressure = (FinalPressure - zero) * 1.085 + zero
 
         kPaFinalPressure.clear()
         for i in FinalPressure:
