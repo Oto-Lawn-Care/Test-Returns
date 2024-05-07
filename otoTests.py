@@ -1626,7 +1626,7 @@ class ValveCalibration(TestStep):
 
         if main2peaks_position[0] != None and main2peaks_position[1] != None:
             fullyOPEN_valve_position = main2peaks_position[0]  # main2peaks_position[0]  # Pass 0 or 1 for either closed valve position
-            valve_offset = (fullyOPEN_valve_position + 26500) % 36000  # closed position is minus 95° from fully open (5° lag).
+            valve_offset = (fullyOPEN_valve_position + 26800) % 36000  # closed position is minus 92° from fully open (2° lag).
             peripherals_list.DUTsprinkler.valveOffset = int(valve_offset)
             peripherals_list.DUTsprinkler.valveFullyOpen = int(fullyOPEN_valve_position)
             self.parent.text_console_logger(f"Absolute Calculated Valve Closed: {valve_offset/100}°, Open: {fullyOPEN_valve_position/100}°")
